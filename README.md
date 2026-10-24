@@ -30,6 +30,8 @@ docs/HANDOFF.md          硬件结果、已知边界与后续任务
 
 本仓库不复制官方 SDK、设备凭证或产品配置。请每位开发者自行克隆官方仓库并设置 `IDF_PATH`。
 
+> Windows 路径要求：官方随包 ESP-IDF 的部分脚本在中文用户目录下存在编码问题。请把官方仓库和本仓库都放在不含中文或空格的短路径，例如 `D:\dev\ljyd_xjwb03_agent_public_developer` 与 `D:\dev\MorphCube-XJWB03`，不要直接在 `C:\Users\中文用户名\...` 中构建。
+
 ## 编译（不会自动烧录）
 
 在已经导出 ESP-IDF 环境的终端中：
@@ -61,3 +63,9 @@ UART0：115200、8N1，每条命令以换行结束。
 - 原厂固件备份不进入 Git 仓库，避免发布设备数据。
 
 详细交接见 [docs/HANDOFF.md](docs/HANDOFF.md)。
+
+## 团队协作
+
+- 所有人都可以克隆或 Fork 这个公开仓库。
+- 未被仓库所有者邀请为 collaborator 的同学不能直接向 `main` 推送；应从自己的 Fork 提交 Pull Request。
+- 需要直接推送时，由仓库所有者在 GitHub 的 Collaborators 设置中邀请对应账号，并建议使用功能分支，不直接改 `main`。
