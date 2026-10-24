@@ -30,7 +30,7 @@ docs/HANDOFF.md          硬件结果、已知边界与后续任务
 
 本仓库不复制官方 SDK、设备凭证或产品配置。请每位开发者自行克隆官方仓库并设置 `IDF_PATH`。
 
-> Windows 路径要求：官方随包 ESP-IDF 的部分脚本在中文用户目录下存在编码问题。请把官方仓库和本仓库都放在不含中文或空格的短路径，例如 `D:\dev\ljyd_xjwb03_agent_public_developer` 与 `D:\dev\MorphCube-XJWB03`，不要直接在 `C:\Users\中文用户名\...` 中构建。
+> Windows 路径要求：官方随包 ESP-IDF 的部分脚本在中文用户目录下存在编码问题。请把官方仓库、本仓库和 `IDF_TOOLS_PATH` 都放在不含中文或空格的短路径，例如 `D:\dev\ljyd_xjwb03_agent_public_developer`、`D:\dev\MorphCube-XJWB03` 和 `D:\esp-tools`，不要直接在 `C:\Users\中文用户名\...` 中安装工具或构建。
 
 ## 编译（不会自动烧录）
 
