@@ -1,0 +1,25 @@
+# ESP-IDF generated files
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+
+# Compiled objects and binaries
+*.o
+*.obj
+*.elf
+*.bin
+*.map
+
+# Local tools, credentials, backups and logs
+.vscode/
+.idea/
+*.log
+*.bak
+board-backups/
+secrets/
+credentials/
+
+# OS files
+Thumbs.db
+.DS_Store
