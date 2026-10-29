@@ -1,0 +1,19 @@
+{
+  "body_width": 126,
+  "body_depth": 104,
+  "body_height": 100,
+  "body_z": 48,
+  "corner_radius": 24,
+  "roof_radius": 18,
+  "wall": 2.4,
+  "servo_width": 22.4,
+  "servo_depth": 12.5,
+  "servo_height": 23.8,
+  "servo_clearance": 0.8,
+  "servo_axis_offset": 5.5,
+  "servo_lift": 3.2,
+  "base_radius": 56,
+  "main_board_width": 60,
+  "main_board_height": 85,
+  "main_board_depth": 18
+}

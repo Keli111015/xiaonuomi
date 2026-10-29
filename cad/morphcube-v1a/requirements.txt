@@ -1,0 +1,4 @@
+cadquery==2.8.0
+trimesh==5.2.0
+vtk==9.6.2
+pillow==13.0.0

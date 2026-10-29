@@ -1,4 +1,23 @@
-# MorphCube 官方语音工程适配（阶段 1）
+# MorphCube 官方语音工程适配
+
+## 当前接入方式（2026-10-29）
+
+使用`apply_overlay.py`和`sdk-overlay/`，覆盖全部当前SDK改动。下方“阶段1”及旧patch仅为历史记录，**不要在当前overlay上重复应用旧patch**。
+
+在干净的官方SDK基线`89020f5e04bf777ae1672b8f3d320bc6e0ef3e0c`上：
+
+```powershell
+python integration/official-app/apply_overlay.py D:\dev\ljyd-sdk
+python integration/official-app/apply_overlay.py D:\dev\ljyd-sdk --apply
+```
+
+默认只检查基线和文件哈希；`--apply`才复制代码，且拒绝覆盖已有本地改动。不会编译、擦除或烧录。
+
+应用后，将SDK的`apps/main/cloud/ljyd_cloud_local.example.h`复制为同目录`ljyd_cloud_local.h`，填自己的产品PID和密钥（上游宏拼写`SECERT`需保留）。工具会在SDK本地Git排除列表忽略真实配置。示例含编译阻断，未填写不能直接编译。
+
+然后在官方ESP-IDF环境中进入SDK的`apps`目录执行`idf.py build`。实际云端Agent和权限不在本仓库内，需各开发者自行准备。摄像头/舵机冲突和测试边界见[当前交接](../../docs/CURRENT_HANDOFF.md)。
+
+## 以下为阶段1历史说明
 
 这一层把已验证的 MorphCube 学习状态机接到灵机一动官方 Pomodoro 生命周期中。它暂不接摄像头，目的是先把“专注计时、开小差扣血、血量归零自动暂停”这一条链路做稳。
 
@@ -60,4 +79,4 @@ distraction ignored active=1 hp=90
 - 还没有把 HP 和阶段状态上报到控制面板；状态读取接口已经保留。
 - 还没有把摄像头三姿态结果接入；姿态提醒规则仍由 `mc_study` 保存。
 - 每次真实的新推理结果只能调用一次姿态入口；无人物、关键点不足或断帧必须提交 `UNKNOWN`，不能复用上一帧。
-- 还没有在完整官方固件上烧录。必须先完成整包编译，再由接板同学确认后烧录。
+- 本段为阶段1记录；当前版本完整应用已烧录，详见上方当前交接。新目标设备仍需先备份并核对分区。

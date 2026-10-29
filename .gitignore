@@ -23,3 +23,12 @@ credentials/
 # OS files
 Thumbs.db
 .DS_Store
+
+# Per-developer configuration and private camera diagnostics
+ljyd_cloud_local.h
+__pycache__/
+*.pyc
+*-log.txt
+tools/camera/*.jpg
+tools/camera/*.jpeg
+tools/camera/*.png

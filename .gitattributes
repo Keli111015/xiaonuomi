@@ -7,3 +7,6 @@
 *.defaults text eol=lf
 CMakeLists.txt text eol=lf
 *.cmd text eol=crlf
+*.cpp text eol=lf
+*.py text eol=lf
+*.json text eol=lf
