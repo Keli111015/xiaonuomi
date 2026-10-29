@@ -1,0 +1,7 @@
+menu "LCD BU9792 Driver"
+
+    config LCD_BU9792_SUPPORT
+        bool "lcd bu9792 support"
+        depends on QM_LCD_BU9792_SUPPORT
+        default "n"
+endmenu

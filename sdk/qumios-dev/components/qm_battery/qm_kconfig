@@ -1,0 +1,133 @@
+menu "qm battery"
+
+    config QM_BATTERY_SUPPORT
+        bool "qm battery support"
+        default "n"
+        select QM_TYPE_FLOAT32_SUPPORT
+        help
+            Enable voltage-only battery SOC/SOH estimator based on UKF.
+
+    if QM_BATTERY_SUPPORT
+
+        config QM_BATTERY_DEFAULT_TEMP_C
+            int "Default battery temperature when no sensor exists"
+            default 25
+            help
+                Temperature used when caller does not provide a temperature
+                measurement. For products without temperature sensing, keep
+                temperature compensation disabled and use this default.
+
+        config QM_BATTERY_TEMP_COMP_ENABLE
+            bool "Enable temperature compensation by default"
+            default n
+            help
+                Enable OCV temperature compensation in the default
+                battery config. The caller still needs to provide a valid
+                temperature sample for compensation to take effect.
+
+        config QM_BATTERY_SOH_UPDATE_ENABLE
+            bool "Enable SOH update by default"
+            default y
+            help
+                Let the estimator slowly update SOH from estimated internal
+                resistance. Disable when the product only needs SOC or does not
+                have enough validation data for SOH.
+
+        config QM_BATTERY_CHARGE_SETTLE_S
+            int "Charging state change settling window in seconds"
+            default 30
+            help
+                After charging state changes, terminal voltage can jump because
+                of charger insertion/removal rather than true OCV change. During
+                this window the estimator reduces voltage correction strength
+                and disables OCV/full/empty voltage anchors.
+
+        config QM_BATTERY_CHARGE_SETTLE_RM_SCALE
+            int "Measurement noise scale during charge settling"
+            default 6
+            range 1 100
+            help
+                Measurement-noise multiplier used during the charging state
+                settling window. Larger values reduce SOC movement caused by
+                plug-in/unplug voltage transients.
+
+        config QM_BATTERY_RELAX_CONFIRM_S
+            int "Relaxation confirmation time in seconds"
+            default 60
+            range 0 3600
+            help
+                Required stable time before the estimator treats the battery as
+                relaxed and allows OCV-based SOC correction.
+
+        config QM_BATTERY_CHARGE_FULL_CONFIRM_S
+            int "Charger full signal confirmation time in seconds"
+            default 8
+            range 0 3600
+            help
+                Required continuous charger-full signal time before SOC is
+                anchored toward 100 percent.
+
+        config QM_BATTERY_LEARNED_FULL_MIN_MV
+            int "Minimum learned full voltage in millivolts"
+            default 4050
+            range 0 10000
+            help
+                Lower bound used when learning a full-charge voltage from the
+                charger-full signal.
+
+        config QM_BATTERY_LEARNED_FULL_MAX_MV
+            int "Maximum learned full voltage in millivolts"
+            default 4200
+            range 0 10000
+            help
+                Upper bound used when learning a full-charge voltage from the
+                charger-full signal.
+
+        config QM_BATTERY_LEARNED_FULL_BLEND_PERMILLE
+            int "Learned full voltage blend per confirmed full event in permille"
+            default 80
+            range 0 1000
+            help
+                Blend alpha applied when a newly confirmed charger-full event
+                updates the learned full-charge voltage. The default 80 means
+                each full charge cycle moves the learned value 8 percent toward
+                the newly observed full voltage.
+
+        config QM_BATTERY_FULL_GUARD_S
+            int "Recent full SOC guard time in seconds"
+            default 1800
+            range 0 86400
+            help
+                Time after a confirmed charger-full event during which
+                non-charging voltage correction cannot immediately pull SOC
+                below QM_BATTERY_FULL_GUARD_MIN_PERCENT. Set to 0 to disable.
+
+        config QM_BATTERY_FULL_GUARD_MIN_PERCENT
+            int "Recent full SOC guard minimum percent"
+            default 98
+            range 0 100
+            help
+                Minimum SOC kept while the recent-full guard is active. This
+                avoids dropping from 100 percent immediately after unplugging
+                because of ADC offset, aging, or voltage relaxation.
+
+        config QM_BATTERY_INITIAL_SOC_MAX_AGE_H
+            int "Maximum trusted persisted SOC age in hours"
+            default 24
+            range 0 8760
+            help
+                Persisted SOC older than this value is treated as stale and is
+                checked against the first non-charging OCV estimate. Set to 0 to
+                trust the persisted SOC without age-based OCV verification.
+
+        config QM_BATTERY_STANDBY_DRAIN_PCT_PER_DAY
+            int "Offline standby SOC drain in percent per day"
+            default 2
+            range 0 100
+            help
+                Conservative SOC drop applied to a persisted SOC seed according
+                to its age before the first voltage update.
+
+    endif
+
+endmenu

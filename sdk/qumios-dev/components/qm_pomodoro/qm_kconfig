@@ -1,0 +1,66 @@
+menu "qm pomodoro"
+
+    config QM_POMODORO_SUPPORT
+        bool "qm pomodoro support"
+        default "n"
+        depends on QM_OS_TIMER_SUPPORT
+        depends on QM_OS_MUTEX_SUPPORT
+        help
+            Enable the qumi-based pomodoro timer component.
+
+    if QM_POMODORO_SUPPORT
+
+        config QM_POMODORO_FOCUS_SEC
+            int "Default focus duration (seconds)"
+            range 1 4294967
+            default 1500
+            help
+                Default focus phase duration.
+
+        config QM_POMODORO_SHORT_BREAK_SEC
+            int "Default short break duration (seconds)"
+            range 1 4294967
+            default 300
+            help
+                Default short break phase duration.
+
+        config QM_POMODORO_LONG_BREAK_SEC
+            int "Default long break duration (seconds)"
+            range 1 4294967
+            default 900
+            help
+                Default long break phase duration.
+
+        config QM_POMODORO_LONG_BREAK_INTERVAL
+            int "Default long break interval"
+            range 1 2147483647
+            default 4
+            help
+                Number of completed focus phases before starting a long break.
+
+        config QM_POMODORO_FOCUS_TARGET
+            int "Default focus target"
+            range 1 2147483647
+            default 4
+            help
+                Number of focus phases before the timer finishes.
+
+        config QM_POMODORO_TICK_MS
+            int "Default tick period (ms)"
+            range 100 2147483647
+            default 1000
+            help
+                Kernel timer period used to update remaining time. It does not
+                need to evenly divide phase durations.
+
+        config QM_POMODORO_SINGLE_ROUND
+            bool "Single round: one focus + one short break then finish"
+            default "n"
+            help
+                When enabled, the default configuration runs a single round:
+                one focus phase then one short break, then the timer finishes.
+                Set qm_pomodoro_config_t.single_round to override per instance.
+
+    endif
+
+endmenu

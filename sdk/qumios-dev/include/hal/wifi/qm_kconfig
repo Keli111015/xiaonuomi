@@ -1,0 +1,10 @@
+menu "wifi"
+
+
+    config QM_WIFI_SUPPORT
+        bool "wifi support"
+        select QM_WORK_SUPPORT
+        default "n"
+
+    
+endmenu

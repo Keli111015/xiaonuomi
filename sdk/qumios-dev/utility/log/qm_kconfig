@@ -1,0 +1,25 @@
+menu "log"
+
+    config QM_LOG
+        bool "qm log"
+        default y
+        if QM_LOG
+            choice
+                prompt "select log output levels"
+                default LOG_SIMPLE
+
+                config LOG_SIMPLE
+                    bool "log simple"
+
+                config LOG_DETAILS
+                    bool "log details"
+            endchoice
+
+            config QM_ASSERT
+                bool "qm assert support"
+                default n 
+
+        endif
+
+           
+endmenu

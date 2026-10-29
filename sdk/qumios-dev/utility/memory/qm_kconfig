@@ -1,0 +1,69 @@
+menu "memory"
+
+    config QM_MEM_HEAP_SUPPORT
+        bool "Enable instance Heap allocator"
+        default n
+        select QM_STRING
+        help
+            Enable the caller-owned variable-size Heap utility.
+            One region behaves like heap_4 and multiple regions behave
+            like heap_5. This option can be enabled with Pool and Arena.
+
+    if QM_MEM_HEAP_SUPPORT
+
+        config QM_MEM_HEAP_ALIGNMENT
+            int "Heap allocation alignment (bytes)"
+            default 4
+            range 4 64
+            help
+                Minimum alignment of allocated payloads.
+                Valid values: 4, 8, 16, 32, 64. Other values cause a
+                compile-time error. Private metadata may require a
+                stricter alignment. Caller storage need not be aligned.
+
+    endif
+
+    config QM_MEM_POOL_SUPPORT
+        bool "Enable instance Pool allocator"
+        default n
+        select QM_STRING
+        help
+            Enable the caller-owned fixed-block Pool with one or more
+            block sizes. This option can be enabled with Heap and Arena.
+
+    if QM_MEM_POOL_SUPPORT
+
+        config QM_MEM_POOL_ALIGNMENT
+            int "Pool allocation alignment (bytes)"
+            default 4
+            range 4 64
+            help
+                Alignment of allocated payloads and slot strides.
+                Valid values: 4, 8, 16, 32, 64. Other values cause a
+                compile-time error. QM_MEM_POOL_STORAGE_SIZE includes
+                metadata padding and the margin for unaligned storage.
+
+    endif
+
+    config QM_MEM_ARENA_SUPPORT
+        bool "Enable instance Arena allocator"
+        default n
+        help
+            Enable the caller-owned linear Arena utility with mark,
+            rewind, and reset lifecycle operations. This option can be
+            enabled with Heap and Pool.
+
+    if QM_MEM_ARENA_SUPPORT
+
+        config QM_MEM_ARENA_ALIGNMENT
+            int "Arena allocation alignment (bytes)"
+            default 4
+            range 4 64
+            help
+                Alignment of every allocated payload.
+                Valid values: 4, 8, 16, 32, 64. Other values cause a
+                compile-time error. Caller storage need not be aligned.
+
+    endif
+
+endmenu

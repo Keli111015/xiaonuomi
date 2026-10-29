@@ -1,0 +1,206 @@
+menu "QUMI display controller client"
+
+    config QM_DISPLAY_CLIENT_SUPPORT
+        bool "QUMI display controller client support"
+        default n
+        select QM_TIMER
+        select QM_CRC
+        help
+            Enable the transport-independent master-side client for the remote
+            two-screen display controller protocol V1.0.
+
+    if QM_DISPLAY_CLIENT_SUPPORT
+
+        config QM_DISPLAY_CLIENT_FW_TIMEOUT_MS
+            int "GET_FW_VERSION timeout (ms)"
+            range 1 60000
+            default 300
+
+        config QM_DISPLAY_CLIENT_FW_RETRY_MAX
+            int "GET_FW_VERSION retry count"
+            range 0 10
+            default 2
+
+        config QM_DISPLAY_CLIENT_DISPLAY_EXTRA_TIMEOUT_MS
+            int "DISPLAY timeout after activation delay (ms)"
+            range 1 60000
+            default 5000
+
+        config QM_DISPLAY_CLIENT_DISPLAY_RETRY_MAX
+            int "DISPLAY retry count"
+            range 0 10
+            default 2
+
+        config QM_DISPLAY_CLIENT_SCREEN_CONTROL_TIMEOUT_MS
+            int "Screen power/brightness timeout (ms)"
+            range 1 60000
+            default 500
+
+        config QM_DISPLAY_CLIENT_SCREEN_CONTROL_RETRY_MAX
+            int "Screen power/brightness retry count"
+            range 0 10
+            default 2
+
+        config QM_DISPLAY_CLIENT_ASSET_BEGIN_TIMEOUT_MS
+            int "ASSET_BEGIN timeout (ms)"
+            range 1 60000
+            default 1000
+
+        config QM_DISPLAY_CLIENT_ASSET_BEGIN_RETRY_MAX
+            int "ASSET_BEGIN retry count"
+            range 0 10
+            default 3
+
+        config QM_DISPLAY_CLIENT_ASSET_DATA_TIMEOUT_MS
+            int "ASSET_DATA timeout (ms)"
+            range 1 60000
+            default 1000
+
+        config QM_DISPLAY_CLIENT_ASSET_DATA_RETRY_MAX
+            int "ASSET_DATA retry count"
+            range 0 10
+            default 2
+
+        config QM_DISPLAY_CLIENT_ASSET_OFFSET_RESTART_MAX
+            int "ASSET_DATA offset restart count"
+            range 0 10
+            default 2
+
+        config QM_DISPLAY_CLIENT_ASSET_CHUNK_SIZE
+            int "Asset data chunk size (bytes)"
+            range 128 1017
+            default 512
+            help
+                Number of asset bytes carried by each ASSET_DATA request,
+                except for the final request which may be shorter.
+
+        config QM_DISPLAY_CLIENT_ASSET_END_TIMEOUT_MS
+            int "ASSET_END timeout (ms)"
+            range 1 60000
+            default 5000
+
+        config QM_DISPLAY_CLIENT_ASSET_END_RETRY_MAX
+            int "ASSET_END retry count"
+            range 0 10
+            default 2
+
+        config QM_DISPLAY_CLIENT_BUSY_RETRY_INTERVAL_MS
+            int "BUSY retry interval (ms)"
+            range 0 60000
+            default 100
+
+        config QM_DISPLAY_CLIENT_BUSY_RETRY_MAX
+            int "BUSY retry count"
+            range 0 10
+            default 3
+
+        config QM_DISPLAY_CLIENT_EVENT_ACK_TIMEOUT_MS
+            int "DISPLAY_COMPLETE ACK timeout (ms)"
+            range 1 60000
+            default 500
+
+        config QM_DISPLAY_CLIENT_EVENT_ACK_RETRY_MAX
+            int "DISPLAY_COMPLETE ACK retry count"
+            range 0 10
+            default 2
+
+        config QM_DISPLAY_CLIENT_EVENT_CACHE_SIZE
+            int "DISPLAY_COMPLETE deduplication cache size"
+            range 1 64
+            default 32
+
+        config QM_DISPLAY_CLIENT_EVENT_DEDUP_WINDOW_MS
+            int "DISPLAY_COMPLETE deduplication window (ms)"
+            range 1 600000
+            default 5000
+
+        config QM_DISPLAY_CLIENT_OTA_SUPPORT
+            bool "Enable display-controller OTA support"
+            default y
+
+        if QM_DISPLAY_CLIENT_OTA_SUPPORT
+
+            config QM_DISPLAY_CLIENT_OTA_BEGIN_TIMEOUT_MS
+                int "OTA_BEGIN timeout (ms)"
+                range 1 60000
+                default 5000
+
+            config QM_DISPLAY_CLIENT_OTA_BEGIN_RETRY_MAX
+                int "OTA_BEGIN retry count"
+                range 0 10
+                default 2
+
+            config QM_DISPLAY_CLIENT_OTA_DATA_TIMEOUT_MS
+                int "OTA_DATA timeout (ms)"
+                range 1 60000
+                default 1000
+
+            config QM_DISPLAY_CLIENT_OTA_DATA_RETRY_MAX
+                int "OTA_DATA retry count"
+                range 0 10
+                default 2
+
+            config QM_DISPLAY_CLIENT_OTA_OFFSET_RESTART_MAX
+                int "OTA_DATA offset restart count"
+                range 0 10
+                default 2
+
+            config QM_DISPLAY_CLIENT_OTA_CHUNK_SIZE
+                int "OTA data chunk size (bytes)"
+                range 1 1020
+                default 512
+
+            config QM_DISPLAY_CLIENT_OTA_END_TIMEOUT_MS
+                int "OTA_END timeout (ms)"
+                range 1 60000
+                default 10000
+
+            config QM_DISPLAY_CLIENT_OTA_END_RETRY_MAX
+                int "OTA_END retry count"
+                range 0 10
+                default 2
+
+        endif
+
+        config QM_DISPLAY_CLIENT_LOG_CONFIG
+            bool "Enable qm_display_client log category configuration"
+            default n
+            help
+                Enable category-level logging for qm_display_client.
+                When disabled, only error and lifecycle logs are enabled.
+
+        if QM_DISPLAY_CLIENT_LOG_CONFIG
+
+            config QM_DISPLAY_CLIENT_LOG_ERROR
+                bool "qm_display_client error logs"
+                default y
+
+            config QM_DISPLAY_CLIENT_LOG_LIFECYCLE
+                bool "qm_display_client lifecycle logs"
+                default y
+
+            config QM_DISPLAY_CLIENT_LOG_CONTROL
+                bool "qm_display_client control logs"
+                default n
+
+            config QM_DISPLAY_CLIENT_LOG_UPLINK
+                bool "qm_display_client uplink logs"
+                default n
+
+            config QM_DISPLAY_CLIENT_LOG_DOWNLINK
+                bool "qm_display_client downlink logs"
+                default n
+
+            config QM_DISPLAY_CLIENT_LOG_PAYLOAD
+                bool "qm_display_client payload logs"
+                default n
+
+            config QM_DISPLAY_CLIENT_LOG_STATS
+                bool "qm_display_client statistics logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

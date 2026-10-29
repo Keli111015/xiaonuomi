@@ -1,0 +1,96 @@
+menu "qm alarm example config"
+
+    config QM_ALARM_EXAMPLE_CONFIG
+        bool "qm alarm example config"
+        default n
+
+    if QM_ALARM_EXAMPLE_CONFIG
+
+        config QM_ALARM_EXAMPLE_PRODUCT_ID
+            int "alarm example product id"
+            default 0
+
+        config QM_ALARM_EXAMPLE_PRODUCT_SECRET
+            string "alarm example product secret"
+            default ""
+
+        config QM_ALARM_EXAMPLE_SN
+            string "alarm example serial number"
+            default "qm-alarm-example-device"
+
+        config QM_ALARM_EXAMPLE_VERSION
+            string "alarm example version"
+            default "1.0.0"
+
+        config QM_ALARM_EXAMPLE_DYNREG_HOST
+            string "alarm example dynreg host override"
+            default ""
+
+        config QM_ALARM_EXAMPLE_ADV_CID
+            string "alarm example BLE provision adv cid"
+            default ""
+
+        config QM_ALARM_EXAMPLE_WIFI_SSID
+            string "alarm example Wi-Fi ssid"
+            default ""
+
+        config QM_ALARM_EXAMPLE_WIFI_PASSWORD
+            string "alarm example Wi-Fi password"
+            default ""
+
+        config QM_ALARM_EXAMPLE_WIFI_RETRY_MAX
+            int "alarm example Wi-Fi retry max"
+            default 10
+
+        config QM_ALARM_EXAMPLE_NAME
+            string "alarm example name"
+            default "qm_alarm example"
+
+        config QM_ALARM_EXAMPLE_USE_FIXED_TIME
+            bool "use fixed alarm time"
+            default y
+
+        config QM_ALARM_EXAMPLE_HOUR
+            int "alarm example hour"
+            default 7
+            range 0 23
+
+        config QM_ALARM_EXAMPLE_MINUTE
+            int "alarm example minute"
+            default 30
+            range 0 59
+
+        config QM_ALARM_EXAMPLE_OFFSET_MIN
+            int "alarm example offset minutes when fixed time is disabled"
+            default 2
+            range 1 59
+
+        config QM_ALARM_EXAMPLE_REPEAT_MASK
+            hex "alarm example repeat mask"
+            default 0x1F
+
+        config QM_ALARM_EXAMPLE_ENABLE_SNOOZE
+            bool "enable example snooze"
+            default y
+
+        config QM_ALARM_EXAMPLE_SNOOZE_INTERVAL_MIN
+            int "alarm example snooze interval minutes"
+            default 5
+            range 1 30
+
+        config QM_ALARM_EXAMPLE_SNOOZE_MAX_COUNT
+            int "alarm example snooze max count"
+            default 3
+            range 1 10
+
+        config QM_ALARM_EXAMPLE_ENABLE_CLOUD_REPORT
+            bool "report alarm list after local create"
+            default y
+
+        config QM_ALARM_EXAMPLE_EXTENSIONS
+            string "alarm example extensions json"
+            default "{}"
+
+    endif
+
+endmenu

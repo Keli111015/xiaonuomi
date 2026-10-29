@@ -1,0 +1,54 @@
+menu "cli"
+
+    config QM_CLI_SUPPORT
+        bool "qm cli support"
+        default "n"
+
+        if QM_CLI_SUPPORT
+            choice
+                prompt "qm cli min size"
+                default QM_CLI_MINI_SIZE
+
+                config QM_CLI_MINI_SIZE
+                    bool "qm cli min size"
+
+                config QM_CLI_BIG_SIZE
+                    bool "qm cli big size"
+
+            endchoice
+
+            config QM_CLI_TASK_SIZE
+                int "cli task size"
+                default 2048
+
+            config QM_CLI_TASK_PRIO
+                int "cli task prio"
+                default 20
+
+            config QM_CLI_MAX_COMMANDS
+                int "cli max commands"
+                default 32  if QM_CLI_MINI_SIZE
+                default 64  if QM_CLI_BIG_SIZE
+                range 1 64
+
+            config QM_CLI_MAX_ARG_NUM
+                int "cli max arg num"
+                default 8 if QM_CLI_MINI_SIZE
+                default 16 if QM_CLI_BIG_SIZE
+                range 4 16 
+
+            config QM_CLI_MAX_ONCECMD_NUM
+                int "cli input cmd num at once"
+                default 1 if QM_CLI_MINI_SIZE
+                default 6 if QM_CLI_BIG_SIZE
+                range 1 10
+
+            config QM_CLI_INBUF_SIZE
+                int "cli input buffer size"
+                default 256 if QM_CLI_MINI_SIZE
+                default 512 if QM_CLI_BIG_SIZE
+                range 64 1024
+
+        endif
+        
+endmenu

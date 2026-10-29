@@ -1,0 +1,37 @@
+menu "qm agent example config"
+
+    config QM_AGENT_EXAMPLE_CONFIG
+        bool "qm agent example config"
+        depends on QM_AGENT_SUPPORT
+
+    if QM_AGENT_EXAMPLE_CONFIG
+
+        config QM_AGENT_EXAMPLE_USE_CUSTOM_TRANSPORT
+            bool "use built-in custom demo transport"
+            help
+                Use a local fake transport so the example can run without cloud credentials.
+
+        config QM_AGENT_EXAMPLE_START_TEXT
+            string "initial text sent by the example"
+
+        config QM_AGENT_EXAMPLE_TTS_TEXT
+            string "initial TTS text requested by the example"
+
+        config QM_AGENT_EXAMPLE_JOYINSIDE_BOT_ID
+            string "JoyInside bot id"
+
+        config QM_AGENT_EXAMPLE_JOYINSIDE_ACCESS_TOKEN
+            string "JoyInside access token"
+
+        config QM_AGENT_EXAMPLE_JOYINSIDE_UID
+            string "JoyInside uid"
+
+        config QM_AGENT_EXAMPLE_JOYINSIDE_CHAT_ROLE_CODE
+            string "JoyInside chat role code"
+
+        config QM_AGENT_EXAMPLE_JOYINSIDE_TIMEOUT_MS
+            int "JoyInside request timeout"
+
+    endif
+
+endmenu

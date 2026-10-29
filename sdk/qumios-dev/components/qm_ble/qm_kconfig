@@ -1,0 +1,96 @@
+menu "qm ble"
+
+    config QM_BLE
+        bool "qm ble support"
+        select QM_AES   
+        select QM_SHA256
+        select QM_TIMER
+        select QM_STRING
+        default "n"
+
+    if QM_BLE
+
+        config QM_BLE_VESION
+            int "qm ble version support"
+            default 3
+            range 2 3
+
+        config QB_QM_COMPANY_ID
+            hex "qm ble company id"
+            default 0xF018
+    
+        config QM_BLE_AUTH_SUPPORT
+            bool "qm ble auth support"
+            default "y"
+
+        config QM_BLE_COMBO_NET_SUPPORT
+            bool "qm ble combo net support"
+            default "y"
+
+        config QM_BLE_LONG_MTU_SUPPORT
+            bool "qm ble long mtu support"
+            default "y"
+
+        config QM_BLE_VER_4_2_SUPPORT
+            bool "qm ble 4.2 feature support"
+            default "y"
+
+        config QM_BLE_COMBO_OTA_SUPPORT
+            bool "qm ble ota support"
+            default "y"
+
+        config QM_BLE_MAX_FRAME_NUMEBER
+            int "qm ble max frame number"
+            default 16
+            range 5 20
+
+        config QM_BLE_LOG_CONFIG
+            bool "Enable qm_ble log category configuration"
+            default n
+            help
+                Enable category-level logging for qm_ble.
+                When disabled, only error and lifecycle logs are enabled.
+
+        if QM_BLE_LOG_CONFIG
+
+            config QM_BLE_LOG_ERROR
+                bool "qm_ble error logs"
+                default y
+
+            config QM_BLE_LOG_LIFECYCLE
+                bool "qm_ble lifecycle logs"
+                default y
+
+            config QM_BLE_LOG_CONTROL
+                bool "qm_ble control logs"
+                default n
+
+            config QM_BLE_LOG_UPLINK
+                bool "qm_ble uplink logs"
+                default n
+
+            config QM_BLE_LOG_DOWNLINK
+                bool "qm_ble downlink logs"
+                default n
+
+            config QM_BLE_LOG_PAYLOAD
+                bool "qm_ble payload logs"
+                default n
+
+            config QM_BLE_LOG_AUTH
+                bool "qm_ble authentication logs"
+                default n
+
+            config QM_BLE_LOG_OTA
+                bool "qm_ble OTA logs"
+                default n
+
+            config QM_BLE_LOG_STATS
+                bool "qm_ble statistics logs"
+                default n
+
+        endif
+
+    endif
+        
+endmenu

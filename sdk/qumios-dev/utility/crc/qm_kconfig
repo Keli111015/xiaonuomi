@@ -1,0 +1,9 @@
+menu "CRC"
+
+    config QM_CRC
+        bool "CRC utility support"
+        default n
+        help
+            Enable the generic CRC algorithms in utility/crc.
+
+endmenu

@@ -1,0 +1,82 @@
+menu "qm battery example config"
+
+    config QM_BATTERY_EXAMPLE_CONFIG
+        bool "qm battery example config"
+        default n
+
+    if QM_BATTERY_EXAMPLE_CONFIG
+
+        config QM_BATTERY_EXAMPLE_USE_ADC
+            bool "use adc sampling path"
+            default n
+
+        config QM_BATTERY_EXAMPLE_ADC_PORT
+            int "example ADC port"
+            default 0
+
+        config QM_BATTERY_EXAMPLE_ADC_PIN
+            int "example ADC pin"
+            default 2
+
+        config QM_BATTERY_EXAMPLE_ADC_SCALE_V_PER_COUNT
+            string "example ADC scale in volts per count"
+            default "0.001f"
+
+        config QM_BATTERY_EXAMPLE_ADC_OFFSET_V
+            string "example ADC offset in volts"
+            default "0.0f"
+
+        config QM_BATTERY_EXAMPLE_ADC_DIVIDER_RATIO
+            string "example ADC divider ratio"
+            default "1.0f"
+
+        config QM_BATTERY_EXAMPLE_R_NOMINAL_MOHM
+            int "example calibrated nominal internal resistance in milliohms"
+            default 60
+            range 1 10000
+
+        config QM_BATTERY_EXAMPLE_FULL_ANCHOR_MV
+            int "example calibrated full voltage anchor in millivolts"
+            default 4180
+            range 1 10000
+
+        config QM_BATTERY_EXAMPLE_EMPTY_ANCHOR_MV
+            int "example calibrated empty voltage anchor in millivolts"
+            default 3300
+            range 1 10000
+
+        config QM_BATTERY_EXAMPLE_CHARGE_FULL_MIN_MV
+            int "example calibrated minimum voltage for charger full signal"
+            default 4050
+            range 1 10000
+
+        config QM_BATTERY_EXAMPLE_SAVED_SOC_ENABLE
+            bool "restore a persisted SOC seed in the example"
+            default y
+
+        config QM_BATTERY_EXAMPLE_SAVED_SOC_PERCENT
+            int "example persisted SOC percent"
+            default 72
+            range 0 100
+
+        config QM_BATTERY_EXAMPLE_SAVED_SOC_AGE_S
+            int "example persisted SOC age in seconds"
+            default 7200
+            range 0 31536000
+
+        config QM_BATTERY_EXAMPLE_SAVED_SOC_AGE_KNOWN
+            bool "example persisted SOC age is known"
+            default y
+
+        config QM_BATTERY_EXAMPLE_LEARNED_FULL_ENABLE
+            bool "restore a learned full voltage in the example"
+            default y
+
+        config QM_BATTERY_EXAMPLE_LEARNED_FULL_MV
+            int "example persisted learned full voltage in millivolts"
+            default 4120
+            range 0 10000
+
+    endif
+
+endmenu

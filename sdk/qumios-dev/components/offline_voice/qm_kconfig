@@ -1,0 +1,67 @@
+menu "Offline_Voice"
+
+    config QM_OFFLINE_VOICE_SUPPORT
+        bool "offline voice"
+        default n
+
+    if QM_OFFLINE_VOICE_SUPPORT
+        config LOG_ON
+            bool "config log on or off"
+            default "n"    
+        choice
+            prompt "choice type"
+            default OFFLINE_VOICE_TYPE_GEN_SERIAL
+
+            config OFFLINE_VOICE_TYPE_GEN_SERIAL
+                bool "choice xjiang gen serial type"
+
+            config OFFLINE_VOICE_TYPE_OPENCPU 
+                bool "choice open cpu type"
+        endchoice
+
+        config OFFLINE_VOICE_RTOS_SUPPORT
+            bool "offline voice rtos support"
+            default "n"
+
+        config OFFLINE_VOICE_BUFF_NUM
+            int "offline voice buff num selete"
+            default 128
+            range 0 1024
+
+        config OFFLINE_VOICE_RECV_WAIT_TIMEOUT_MS
+            int "offline voice recv wait timeout"
+            default 200
+            range 50 500
+
+        config OFFLINE_VOICE_SEND_WAIT_TIMEOUT_MS
+            int "offline voice send wait timeout"
+            default 200
+            range 50 500
+
+        config OFFLINE_VOICE_UART_SUPPORT
+            bool "offline voice uart support"
+            default "y"
+        if OFFLINE_VOICE_UART_SUPPORT
+
+            config OFFLINE_VOICE_UART_PORT
+                int "offline voice uart port"
+                default 1
+                range 1 10
+
+            config OFFLINE_VOICE_UART_BAUDRATE
+                int "offline voice uart baud rate"
+                default 9600      
+
+            config OFFLINE_VOICE_UART_TX_PIN
+                int "offline voice uart tx pin"
+                default 3  
+
+            config OFFLINE_VOICE_UART_RX_PIN
+                int "offline voice uart rx pin"
+                default 4  
+
+        endif
+    endif
+
+
+endmenu

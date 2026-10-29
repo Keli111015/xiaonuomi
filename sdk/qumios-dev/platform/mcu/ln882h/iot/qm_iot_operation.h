@@ -1,0 +1,74 @@
+#ifndef __QM_IOT_OPERATION_H__
+#define __QM_IOT_OPERATION_H__
+
+#ifdef __cplusplus
+extern "c" {
+#endif
+
+#include "id_map.h"
+#include <magiclink.h>
+
+#define EVENT_NUM_MAX 5
+
+
+/** 属性相关  **/
+typedef struct {
+    char svcId[25];
+    char propId[25];
+    char type_id;
+    char type;
+
+    uint8_t eid_list[EVENT_NUM_MAX];
+    uint8_t propidx;
+    uint8_t value_len;
+    void *value;
+} pid_operation_t;
+
+
+/** 事件、方法相关  **/
+
+// #define event_action 
+
+typedef struct {
+    char svcId[25];
+    char eventId[25];
+
+    unsigned int dataNum;
+    struct MagicLinkDataVal dataArray[5];
+} aid_eid_operation_t;
+
+
+
+map_honor_unit_t *map_honor_node(void);
+
+map_honor_unit_t *map_node_assignment(char *pid, int type_id, int type, int attr_id, int propidx, uint8_t *eiid_list, uint8_t eiid_len) ;
+
+map_honor_unit_t *iot_map_find(map_honor_unit_t *iot_map_find, char *src, uint8_t len);
+
+int iot_map_insert(iot_map_honor_t *iot_map, map_honor_unit_t *new_node);
+
+int foreach_map(map_honor_unit_t *id_map);
+
+int destory_map_node(map_honor_unit_t *id_map);
+
+
+void idmap_serial_copy(iot_map_honor_t *id_map_data, char *svcId, char **sid);
+
+void idmap_prop_copy(map_honor_unit_t *map_honor_unit, char *propId);
+
+void iot_map_service_insert(iot_map_honor_t *iot_map, char *src, uint8_t len);
+
+
+
+
+#ifdef event_action 
+struct MagicLinkDataVal *DataVal_new(void);
+void DataVal_delete(struct MagicLinkDataVal *thiz);
+#endif
+
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

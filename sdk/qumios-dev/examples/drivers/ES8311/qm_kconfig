@@ -1,0 +1,59 @@
+menu "es8311 example config"
+
+    config ES8311_EXAMPLE_CONFIG
+        bool "es8311 example config"
+        default n
+        depends on QM_ES8311_SUPPORT
+        help
+            Enable the ES8311 codec bring-up example.
+
+    if ES8311_EXAMPLE_CONFIG
+
+        config ES8311_EXAMPLE_I2C_PORT
+            int "I2C port"
+            default 0
+            range 0 255
+
+        config ES8311_EXAMPLE_I2C_ADDR
+            hex "ES8311 I2C address"
+            default 0x18
+            range 0x00 0x7F
+
+        config ES8311_EXAMPLE_I2C_SDA_PIN
+            int "I2C SDA pin"
+            default 17
+
+        config ES8311_EXAMPLE_I2C_SCL_PIN
+            int "I2C SCL pin"
+            default 18
+
+        config ES8311_EXAMPLE_SAMPLE_RATE
+            int "Sample rate"
+            default 16000
+            range 8000 96000
+
+        config ES8311_EXAMPLE_MCLK_FROM_PIN
+            bool "Use external MCLK pin"
+            default n
+
+        config ES8311_EXAMPLE_MCLK_FREQUENCY
+            int "MCLK frequency"
+            default 12288000
+            range 1 2147483647
+
+        config ES8311_EXAMPLE_USE_DIGITAL_MIC
+            bool "Use digital microphone"
+            default n
+
+        config ES8311_EXAMPLE_VOLUME
+            int "Output volume"
+            default 70
+            range 0 100
+
+        config ES8311_EXAMPLE_DUMP_REGISTERS
+            bool "Dump registers after init"
+            default n
+
+    endif
+
+endmenu

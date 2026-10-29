@@ -1,0 +1,7 @@
+menu "aes"
+
+    config QM_AES
+        bool "qm aes support"
+        default "n"
+        
+endmenu

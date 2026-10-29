@@ -1,0 +1,266 @@
+#include "boot_sound.h"
+
+#include <string.h>
+
+#include "opus.h"
+#include "qm.h"
+#include "qm_log.h"
+#include "qm_audio.h"
+#include "voice.h"
+#include "agent_app.h"      /* 对话中先停掉 agent 输出，再自己播 */
+
+#include "esp_heap_caps.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+
+#define LOG_TAG "boot_snd"
+
+/*
+ * 开机音效 / 闹铃提示音：16 kHz / 单声道 / 16 bit PCM，已嵌进固件。qm_audio 线上格式是
+ * Opus，所以先把整段编好缓存。播放优先走 agent 的本地提示音通路，没有 agent 会话
+ * （开机阶段）才自己申请 qm_audio 播放会话。
+ */
+#define BS_RATE_HZ          (16000)
+#define BS_FRAME_SAMP       (320)   /* 20 ms */
+#define BS_FRAME_BYTES      (BS_FRAME_SAMP * 2)
+#define BS_OPUS_MAX         (512)
+
+#define BS_FRAME_MAX_NUM    (256)
+
+/* opus_encode 内部 alloca，参考 pcm_drv 的编码任务：栈从 PSRAM 拿 */
+#define BS_STACK_BYTES      (30 * 1024)
+#define BS_TASK_PRIO        (5)
+
+#define BS_ACQUIRE_MS       (800)   /* 单次申请播放权的等待上限 */
+#define BS_ACQUIRE_RETRY    (4)     /* 对端释放通路有延迟，失败重试几次 */
+#define BS_ACQUIRE_GAP_MS   (250)
+#define BS_WRITE_MS         (1000)
+#define BS_DRAIN_MS         (3000)
+
+/* target_add_binary_data(... RENAME_TO boot_sound_pcm) 生成的符号 */
+extern const uint8_t boot_sound_pcm_start[] asm("_binary_boot_sound_pcm_start");
+extern const uint8_t boot_sound_pcm_end[] asm("_binary_boot_sound_pcm_end");
+
+static StaticTask_t s_tcb;
+static StaticSemaphore_t s_sem_buf;
+static SemaphoreHandle_t s_sem;
+static uint8_t s_task_up;
+
+/* 整段 Opus + 每帧偏移表。播放按包写，不拼成一条字节流。 */
+static uint8_t *s_opus;
+static uint32_t *s_opus_off;    /* frames + 1 个，末元素是总字节数 */
+static uint16_t s_opus_frames;
+
+static void boot_sound_task(void *arg);
+
+/* 整段 PCM → Opus，只构建一次 */
+static int boot_sound_build_opus(void)
+{
+    static int16_t frame[BS_FRAME_SAMP];
+    const uint8_t *pcm = boot_sound_pcm_start;
+    uint32_t total = (uint32_t)(boot_sound_pcm_end - boot_sound_pcm_start);
+    uint32_t frames = total / BS_FRAME_BYTES;
+    OpusEncoder *enc;
+    uint32_t pcm_off = 0;
+    uint32_t opus_off = 0;
+    uint16_t i;
+    int err = 0;
+
+    if (s_opus != NULL) {
+        return QM_EOK;
+    }
+    if (frames == 0U || frames > BS_FRAME_MAX_NUM) {
+        QM_LOGW(LOG_TAG, "pcm=%u bytes frames=%u out of range",
+                (unsigned)total, (unsigned)frames);
+        return -QM_EINVAL;
+    }
+
+    s_opus = (uint8_t *)heap_caps_malloc(frames * BS_OPUS_MAX,
+                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    s_opus_off = (uint32_t *)heap_caps_malloc((frames + 1U) * sizeof(uint32_t),
+                                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_opus == NULL || s_opus_off == NULL) {
+        QM_LOGW(LOG_TAG, "opus cache alloc failed");
+        goto fail;
+    }
+
+    enc = opus_encoder_create(BS_RATE_HZ, 1, OPUS_APPLICATION_VOIP, &err);
+    if (enc == NULL) {
+        QM_LOGW(LOG_TAG, "encoder create failed err=%d", err);
+        goto fail;
+    }
+
+    for (i = 0U; i < (uint16_t)frames; i++) {
+        int n;
+
+        /* 嵌进 flash 的数据不保证 2 字节对齐，先拷到对齐缓冲 */
+        memcpy(frame, pcm + pcm_off, BS_FRAME_BYTES);
+        n = opus_encode(enc, frame, BS_FRAME_SAMP, s_opus + opus_off, BS_OPUS_MAX);
+        if (n <= 0) {
+            QM_LOGW(LOG_TAG, "encode failed n=%d frame=%u", n, (unsigned)i);
+            opus_encoder_destroy(enc);
+            goto fail;
+        }
+        s_opus_off[i] = opus_off;
+        opus_off += (uint32_t)n;
+        pcm_off += BS_FRAME_BYTES;
+    }
+    opus_encoder_destroy(enc);
+
+    s_opus_off[frames] = opus_off;
+    s_opus_frames = (uint16_t)frames;
+    QM_LOGI(LOG_TAG, "encoded %u frames / %u bytes opus", (unsigned)frames,
+            (unsigned)opus_off);
+    return QM_EOK;
+
+fail:
+    heap_caps_free(s_opus);
+    heap_caps_free(s_opus_off);
+    s_opus = NULL;
+    s_opus_off = NULL;
+    return -QM_ERROR;
+}
+
+/* 自己的 Control，按包写已编好的 Opus。不占用 agent 那份 Control。 */
+static void boot_sound_play_local(void)
+{
+    qm_audio_control_t *control = NULL;
+    qm_audio_control_play_request_t req;
+    qm_audio_operation_id_t operation = 0;
+    uint16_t i;
+    int ret;
+    int attempt;
+
+    if (!voice_audio_ready()) {
+        QM_LOGW(LOG_TAG, "audio not ready, skip");
+        return;
+    }
+
+    ret = qm_audio_control_create(&control);
+    if (ret != QM_EOK || control == NULL) {
+        QM_LOGW(LOG_TAG, "control create failed ret=%d", ret);
+        return;
+    }
+
+    memset(&req, 0, sizeof(req));
+    req.source.type = QM_AUDIO_SOURCE_PUSH;
+    req.source.value.push.buffer_bytes = 4096;
+    req.codec.codec = QM_AUDIO_CODEC_OPUS;
+    req.codec.framing = QM_AUDIO_CODEC_FRAMING_PACKET;
+    req.codec.packet_duration_ms = 20;
+    req.codec.packet_bytes = 0;
+    req.codec.pcm.sample_rate_hz = BS_RATE_HZ;
+    req.codec.pcm.channels = 1;
+    req.codec.pcm.sample = QM_AUDIO_PCM_S16;
+    req.priority = QM_AUDIO_PRIORITY_HIGH;
+    req.admission = QM_AUDIO_ADMISSION_PREEMPT_LOWER;
+    req.admission_timeout_ms = BS_ACQUIRE_MS;
+
+    ret = qm_audio_control_play(control, &req, &operation);
+    for (attempt = 1; ret != QM_EOK && attempt < BS_ACQUIRE_RETRY; attempt++) {
+        QM_LOGW(LOG_TAG, "play request failed ret=%d, retry %d", ret, attempt);
+        vTaskDelay(pdMS_TO_TICKS(BS_ACQUIRE_GAP_MS));
+        ret = qm_audio_control_play(control, &req, &operation);
+    }
+    if (ret != QM_EOK) {
+        QM_LOGW(LOG_TAG, "play request failed ret=%d (give up)", ret);
+        (void)qm_audio_control_shutdown(control, 1000);
+        (void)qm_audio_control_destroy(control);
+        return;
+    }
+
+    for (i = 0U; i < s_opus_frames; i++) {
+        qm_audio_data_t packet;
+        uint32_t off = s_opus_off[i];
+        uint32_t len = s_opus_off[i + 1U] - off;
+
+        memset(&packet, 0, sizeof(packet));
+        packet.data = s_opus + off;
+        packet.size = len;
+        packet.duration_ms = 20;
+        packet.flags = QM_AUDIO_DATA_DURATION_VALID;
+        ret = qm_audio_control_stream_write_packet(control, operation, &packet, BS_WRITE_MS);
+        if (ret != QM_EOK) {
+            QM_LOGW(LOG_TAG, "write failed ret=%d frame=%u", ret, (unsigned)i);
+            break;
+        }
+    }
+
+    if (ret == QM_EOK) {
+        ret = qm_audio_control_stream_finish(control, operation);
+    }
+    if (ret == QM_EOK) {
+        ret = qm_audio_control_wait(control, operation, BS_DRAIN_MS);
+    }
+    QM_LOGI(LOG_TAG, "local play done ret=%d frames=%u/%u",
+            ret, (unsigned)i, (unsigned)s_opus_frames);
+    (void)qm_audio_control_release(control, operation, 1000);
+    (void)qm_audio_control_shutdown(control, 1000);
+    (void)qm_audio_control_destroy(control);
+}
+
+/* 播一遍；编不出来就直接放弃，不再去抢通路 */
+static void boot_sound_play_once(void)
+{
+    if (boot_sound_build_opus() != QM_EOK) {
+        QM_LOGW(LOG_TAG, "no opus cache, skip");
+        return;
+    }
+
+    if (agent_app_is_active()) {
+        (void)agent_app_set_resource_mode(QM_TRUE);
+        (void)agent_app_abort_output();
+        (void)agent_app_set_resource_mode(QM_FALSE);
+    }
+
+    QM_LOGI(LOG_TAG, "play %u ms local", (unsigned)((uint32_t)s_opus_frames * 20U));
+    boot_sound_play_local();
+}
+
+/* 常驻任务：等信号量 → 播一遍；任务不退出，避免反复建/删任务的资源风险 */
+static void boot_sound_task(void *arg)
+{
+    (void)arg;
+
+    for (;;) {
+        if (xSemaphoreTake(s_sem, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        boot_sound_play_once();
+    }
+}
+
+qm_err_t boot_sound_start(void)
+{
+    static StackType_t *stack;
+
+    if (s_task_up == 0) {
+        stack = (StackType_t *)heap_caps_malloc(BS_STACK_BYTES,
+                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (stack == NULL) {
+            QM_LOGE(LOG_TAG, "stack alloc failed");
+            return -QM_ENOMEM;
+        }
+        s_sem = xSemaphoreCreateBinaryStatic(&s_sem_buf);
+        if (s_sem == NULL) {
+            QM_LOGE(LOG_TAG, "sem create failed");
+            heap_caps_free(stack);
+            return -QM_ENOMEM;
+        }
+        if (xTaskCreateStatic(boot_sound_task, "boot_snd",
+                              BS_STACK_BYTES / sizeof(StackType_t),
+                              NULL, BS_TASK_PRIO, stack, &s_tcb) == NULL) {
+            QM_LOGE(LOG_TAG, "task create failed");
+            heap_caps_free(stack);
+            return -QM_ENOMEM;
+        }
+        s_task_up = 1;
+    }
+
+    /* 正在播时 give 失败（二值信号量已满）= 忽略本次请求，不打断未播完的 */
+    if (xSemaphoreGive(s_sem) != pdTRUE) {
+        QM_LOGD(LOG_TAG, "busy, request merged");
+    }
+    return QM_EOK;
+}

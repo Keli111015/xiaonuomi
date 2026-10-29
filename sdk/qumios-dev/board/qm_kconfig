@@ -1,0 +1,96 @@
+menu "board"
+
+    choice
+        prompt "select board platform"
+        default BOARD_PLATFORM_7100C
+
+        config BOARD_PLATFORM_ESP32X
+            bool "esp32x"
+            if BOARD_PLATFORM_ESP32X
+                config BOARD_PLATFORM_ESP32X_CLI_TX
+                int "config cli uart tx"
+                default 1
+
+                config BOARD_PLATFORM_ESP32X_CLI_RX
+                int "config cli uart rx"
+                default 3
+
+            endif
+
+        config BOARD_PLATFORM_STM32F10X
+            bool "stm32f10x"
+
+        config BOARD_PLATFORM_STM32G0X
+            bool "stm32g0x"
+
+        config BOARD_PLATFORM_7100C
+            bool "7100C(WB40/60)"
+
+        config BOARD_PLATFORM_RTL8762
+            bool "RTL8762(B40)"
+
+        config BOARD_PLATFORM_MHCWB6S
+            bool "MHCWB6S(WB28)"
+            if BOARD_PLATFORM_MHCWB6S
+                config MIIO_VERSION
+                string "miio verison (\"00xx\")"
+                default "0012"
+            endif
+
+        config BOARD_PLATFORM_MHCB09P
+            bool "MHCB09P (B42)"
+            if BOARD_PLATFORM_MHCB09P
+
+            endif
+        config BOARD_PLATFORM_MHCWB4P
+            bool "MHCWB4P(WB20)"
+            if BOARD_PLATFORM_MHCWB4P
+                config MHCWB4P_MIIO_VERSION
+                int "miio verison"
+                default 1
+            endif
+
+        config BOARD_PLATFORM_MHCB12
+            bool "MHCB12G/S (B47)"
+            if BOARD_PLATFORM_MHCB12
+                config MHCB12_MIIO_VERSION
+                int "miio verison"
+                default 127
+            choice
+                prompt "miio mesh template"
+                default MIIO_MESH_TEMPLATE_CLOUD
+
+                config MIIO_MESH_TEMPLATE_CLOUD
+                    bool "miio mesh template cloud"
+
+                config MIIO_MESH_TEMPLATE_ONE_KEY_SWITCH
+                    bool "miio mesh template one key switch"
+
+                config MIIO_MESH_TEMPLATE_TWO_KEY_SWITCH
+                    bool "miio mesh template two key switch"
+
+                config MIIO_MESH_TEMPLATE_THREE_KEY_SWITCH
+                    bool "miio mesh template three key switch"
+
+                config MIIO_MESH_TEMPLATE_FAN
+                    bool "miio mesh template fan"
+
+                config MIIO_MESH_TEMPLATE_LIGHTNESS
+                    bool "miio mesh template lightness"
+
+                config MIIO_MESH_TEMPLATE_LIGHTCTL
+                    bool "miio mesh template lightctl"
+
+            endchoice
+            endif
+
+        config BOARD_PLATFORM_MHCB11S
+            bool "MHCB11S/L (B45)"
+            if BOARD_PLATFORM_MHCB11S
+                config MHCB11S_MIIO_VERSION
+                int "miio verison"
+                default 1
+            endif
+    endchoice
+    
+endmenu

@@ -1,0 +1,7 @@
+menu "qm resource manager example config"
+
+    config QM_RES_MGR_EXAMPLE_CONFIG
+        bool "qm resource manager example config"
+        default n
+
+endmenu

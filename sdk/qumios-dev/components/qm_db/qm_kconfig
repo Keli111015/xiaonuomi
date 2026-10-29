@@ -1,0 +1,111 @@
+menu "qm database"
+
+    config QM_KV_SUPPORT
+        bool "qm kv"
+        default y
+
+    if QM_KV_SUPPORT
+        choice
+            prompt "select kv based platform type"
+            default QM_KV_SYSTEM_SUPPORT
+
+            config QM_KV_SYSTEM_SUPPORT
+                bool "qm kv system"
+
+            config QM_KV_DB_SUPPORT
+                bool "qm kv db"
+
+            if QM_KV_DB_SUPPORT
+
+                config QM_KV_DB_FLASH_PARTITION_INFO
+                    string "kv database partition information"
+                    comment "The config format is as follows <name>,<offset>,<size>, the size must more than twice flash sector size"
+
+            endif
+
+        endchoice
+    endif
+
+
+    config QM_TS_SUPPORT
+        bool "qm ts"
+        default n
+        
+    if QM_TS_SUPPORT
+
+        config QM_TS_DB_FLASH_PARTITION_INFO
+            string "time serial database partition information"
+            comment "The config format is as follows <name>,<offset>,<size>,<name>,<offset>,<size>...."
+    endif
+    
+    if QM_KV_DB_SUPPORT || QM_TS_SUPPORT
+        choice
+            prompt "select internal or external flash"
+            default QM_FLASHDB_INTERNAL_FLASH
+
+            config QM_FLASHDB_INTERNAL_FLASH
+                bool "internal flash"
+                select QM_FLASH_SUPPORT
+
+            config QM_FLASHDB_EXTERNAL_FLASH
+                bool "external flash"
+
+            if QM_FLASHDB_EXTERNAL_FLASH
+
+                choice
+                    prompt "select external flash interface"
+                    default QM_FLASHDB_EXTERNAL_FLASH_SPI
+
+                    config QM_FLASHDB_EXTERNAL_FLASH_SPI
+                    bool "spi flash"
+                    select SFUD_SUPPORT
+
+                endchoice
+
+            endif
+
+        endchoice
+
+
+    endif
+
+    config QM_DB_LOG_CONFIG
+        bool "Enable qm_db log category configuration"
+        default n
+        help
+            Enable category-level logging for qm_db, FlashDB and FAL.
+            When disabled, only error and lifecycle logs are enabled.
+
+    if QM_DB_LOG_CONFIG
+
+        config QM_DB_LOG_ERROR
+            bool "qm_db error logs"
+            default y
+
+        config QM_DB_LOG_LIFECYCLE
+            bool "qm_db lifecycle logs"
+            default y
+
+        config QM_DB_LOG_CONTROL
+            bool "qm_db control logs"
+            default n
+
+        config QM_DB_LOG_KV
+            bool "qm_db key-value logs"
+            default n
+
+        config QM_DB_LOG_TS
+            bool "qm_db time-series logs"
+            default n
+
+        config QM_DB_LOG_FLASH
+            bool "qm_db flash and FlashDB logs"
+            default n
+
+        config QM_DB_LOG_STATS
+            bool "qm_db statistics logs"
+            default n
+
+    endif
+
+endmenu

@@ -1,0 +1,13 @@
+menu "json parser"
+
+    config QM_JSON_PARSER_SUPPORT
+        bool "qm list support"
+        default "y"
+    
+    if QM_JSON_PARSER_SUPPORT
+        config QM_JSON_DEBUG
+            bool "json parser debug"
+            default "y"
+    endif
+    
+endmenu

@@ -1,0 +1,77 @@
+menu "qm battery gauge"
+
+    config QM_BATTERY_GAUGE_SUPPORT
+        bool "qm battery gauge support"
+        default n
+        select QM_TYPE_FLOAT32_SUPPORT
+        help
+            Enable battery gauge based on coulomb counting plus voltage
+            correction.
+
+    if QM_BATTERY_GAUGE_SUPPORT
+
+        config QM_BATTERY_GAUGE_DESIGN_CAPACITY_MAH
+            int "Design capacity in mAh"
+            default 5200
+            range 1 50000
+
+        config QM_BATTERY_GAUGE_USABLE_CAPACITY_MAH
+            int "Usable capacity in mAh"
+            default 5300
+            range 1 50000
+
+        config QM_BATTERY_GAUGE_R_INTERNAL_MOHM
+            int "Internal resistance for load compensation in milliohms"
+            default 80
+            range 0 1000
+
+        config QM_BATTERY_GAUGE_LOW_SOC_PERCENT
+            int "Low battery SOC threshold"
+            default 10
+            range 0 100
+
+        config QM_BATTERY_GAUGE_LOW_VOLTAGE_MV
+            int "Low battery voltage threshold in mV"
+            default 3300
+            range 0 10000
+
+        config QM_BATTERY_GAUGE_EMPTY_VOLTAGE_MV
+            int "Empty voltage anchor in mV"
+            default 3000
+            range 0 10000
+
+        config QM_BATTERY_GAUGE_CUTOFF_VOLTAGE_MV
+            int "Cutoff voltage in mV"
+            default 2750
+            range 0 10000
+
+        config QM_BATTERY_GAUGE_FULL_VOLTAGE_MV
+            int "Full voltage threshold in mV"
+            default 4190
+            range 0 10000
+
+        config QM_BATTERY_GAUGE_FULL_CURRENT_MA
+            int "Full charge current threshold in mA"
+            default 250
+            range 0 50000
+
+        config QM_BATTERY_GAUGE_DEFAULT_TEMP_C
+            int "Default battery temperature"
+            default 25
+
+        config QM_BATTERY_GAUGE_TEMP_COMP_ENABLE
+            bool "Enable OCV temperature compensation by default"
+            default n
+
+        config QM_BATTERY_GAUGE_STORAGE_SUPPORT
+            bool "Enable snapshot storage support"
+            default n
+            select QM_KV_SUPPORT
+            help
+                Enable component snapshot save/load APIs. The current storage
+                backend uses qm_kv internally, but the public battery gauge API
+                remains storage-backend neutral.
+
+    endif
+
+endmenu

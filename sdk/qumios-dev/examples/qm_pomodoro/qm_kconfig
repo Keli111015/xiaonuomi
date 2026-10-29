@@ -1,0 +1,41 @@
+menu "qm pomodoro example config"
+
+    config QM_POMODORO_EXAMPLE_CONFIG
+        bool "qm pomodoro example config"
+        default n
+
+    if QM_POMODORO_EXAMPLE_CONFIG
+
+        config QM_POMODORO_EXAMPLE_FOCUS_SEC
+            int "Example focus duration (seconds)"
+            range 1 4294967
+            default 4
+
+        config QM_POMODORO_EXAMPLE_SHORT_BREAK_SEC
+            int "Example short break duration (seconds)"
+            range 1 4294967
+            default 2
+
+        config QM_POMODORO_EXAMPLE_LONG_BREAK_SEC
+            int "Example long break duration (seconds)"
+            range 1 4294967
+            default 3
+
+        config QM_POMODORO_EXAMPLE_LONG_BREAK_INTERVAL
+            int "Example long break interval"
+            range 1 2147483647
+            default 2
+
+        config QM_POMODORO_EXAMPLE_FOCUS_TARGET
+            int "Example focus target"
+            range 1 2147483647
+            default 3
+
+        config QM_POMODORO_EXAMPLE_TICK_MS
+            int "Example tick period (ms)"
+            range 100 2147483647
+            default 700
+
+    endif
+
+endmenu

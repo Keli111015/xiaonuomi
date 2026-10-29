@@ -1,0 +1,25 @@
+menu "qm provision example config"
+
+    config QM_PROVISION_EXAMPLE_CONFIG
+        bool "qm provision example config"
+        default n
+
+    if QM_PROVISION_EXAMPLE_CONFIG
+
+        config QM_PROVISION_EXAMPLE_PRODUCT_ID
+            int "example product id"
+            default 0
+
+        config QM_PROVISION_EXAMPLE_PRODUCT_SECRET
+            string "example product secret"
+            default ""
+
+        config QM_PROVISION_EXAMPLE_ADV_CID
+            string "example BLE advertising CID"
+            default ""
+            help
+                Leave empty to use CONFIG_QM_PROVISION_BLE_ADV_CID.
+
+    endif
+
+endmenu

@@ -1,0 +1,43 @@
+menu "YMODEM"
+
+    config YMODEM_SUPPORT
+        bool "YMODEM receiver support"
+        default n
+        select QM_TIMER
+        select QM_CRC
+        select QM_STRING
+        help
+            Enable the transport-independent synchronous YMODEM receiver.
+            A PC sends an image over UART and the application writes it through
+            a storage/OTA callback. The receiver uses CRC-16/XMODEM.
+
+    if YMODEM_SUPPORT
+
+        config YMODEM_HANDSHAKE_TIMEOUT_MS
+            int "header/final handshake timeout (ms)"
+            range 100 60000
+            default 5000
+
+        config YMODEM_PACKET_TIMEOUT_MS
+            int "packet timeout (ms)"
+            range 100 60000
+            default 1000
+
+        config YMODEM_RETRY_MAX
+            int "maximum packet retransmissions"
+            range 0 20
+            default 10
+
+        config YMODEM_FILE_NAME_MAX_LEN
+            int "maximum block-0 file name length"
+            range 1 127
+            default 64
+
+        config YMODEM_MAX_FILE_SIZE
+            int "maximum accepted image size (bytes)"
+            range 1024 16777216
+            default 2097152
+
+    endif
+
+endmenu

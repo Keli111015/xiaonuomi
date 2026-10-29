@@ -1,0 +1,151 @@
+menu "qm schedule"
+
+    config QM_SCHEDULE_SUPPORT
+        bool "qm schedule support"
+        default "n"
+        depends on QM_KV_SUPPORT
+        depends on QM_OS_MUTEX_SUPPORT
+        depends on QM_OS_TIMER_SUPPORT
+        depends on QM_TIME_SUPPORT
+        select QM_BACKOFF_SUPPORT
+        help
+            Enable the device-side schedule and reminder component.
+
+    if QM_SCHEDULE_SUPPORT
+
+        config QM_SCHEDULE_DEFAULT_MAX_ITEMS
+            int "Default active schedule item limit"
+            range 1 100
+            default 100
+            help
+                Maximum active schedule items kept by one device instance.
+
+        config QM_SCHEDULE_MAX_REMINDERS_PER_ITEM
+            int "Maximum reminders per schedule"
+            range 1 3
+            default 3
+            help
+                Maximum reminders accepted for one schedule item.
+
+        config QM_SCHEDULE_ID_MAX_LEN
+            int "Maximum schedule ID bytes"
+            range 8 128
+            default 64
+            help
+                Maximum bytes accepted for a schedule ID.
+
+        config QM_SCHEDULE_TITLE_MAX_LEN
+            int "Maximum title UTF-8 bytes"
+            range 1 128
+            default 64
+            help
+                Maximum UTF-8 bytes accepted for a title.
+
+        config QM_SCHEDULE_MAX_QUERY_PAGE
+            int "Maximum query page size"
+            range 1 1000
+            default 100
+            help
+                Maximum items returned by one query page.
+
+        config QM_SCHEDULE_SYNC_MAX_CHUNKS
+            int "Maximum sync chunks"
+            range 1 32
+            default 32
+            help
+                Maximum chunks accepted for one staged sync.
+
+        config QM_SCHEDULE_SYNC_MAX_ITEMS_PER_CHUNK
+            int "Maximum schedules per sync chunk"
+            range 1 100
+            default 20
+            help
+                Maximum schedule items accepted in one standard sync chunk.
+
+        config QM_SCHEDULE_SYNC_STAGING_TIMEOUT_SEC
+            int "Sync staging timeout"
+            range 1 86400
+            default 600
+            help
+                Seconds before an incomplete staged sync can be discarded.
+
+        config QM_SCHEDULE_TOMBSTONE_RETENTION_SEC
+            int "Tombstone retention seconds"
+            range 60 31536000
+            default 604800
+            help
+                Seconds to keep delete tombstones for replay protection.
+
+        config QM_SCHEDULE_MISSED_WINDOW_SEC
+            int "Missed reminder recovery window"
+            range 0 86400
+            default 1800
+            help
+                Seconds used for restart or clock-recovery catch-up.
+
+        config QM_SCHEDULE_SNOOZE_MAX_COUNT
+            int "Maximum snooze count"
+            range 0 16
+            default 3
+            help
+                Maximum snoozes allowed for one reminder occurrence.
+
+        config QM_SCHEDULE_SNOOZE_RECOVERY_WINDOW_SEC
+            int "Snooze recovery window"
+            range 0 86400
+            default 900
+            help
+                Seconds used to recover a missed snooze trigger.
+
+        config QM_SCHEDULE_IOT_MAX_PAYLOAD_LEN
+            int "Maximum schedule IoT payload bytes"
+            range 512 65535
+            default 8192
+            help
+                Maximum UTF-8 bytes accepted for one schedule envelope.
+
+        config QM_SCHEDULE_LOCAL_REPORT_OUTBOX_SIZE
+            int "User action outbox size"
+            range 1 100
+            default 100
+            help
+                Persistent capacity for acknowledge, complete, snooze, and dismiss reports.
+
+        config QM_SCHEDULE_IOT_EVENT_OUTBOX_SIZE
+            int "System event outbox size"
+            range 1 32
+            default 32
+            help
+                Persistent capacity for triggered and syncRequest reports.
+
+        config QM_SCHEDULE_OCCURRENCE_RETENTION_SEC
+            int "Occurrence retention seconds"
+            range 60 31536000
+            default 2592000
+            help
+                Seconds to keep completed or closed occurrence runtime state.
+
+        config QM_SCHEDULE_BINDING_LEASE_SEC
+            int "Binding lease seconds"
+            range 1 604800
+            default 86400
+            help
+                Default offline-reminder lease duration.
+
+        config QM_SCHEDULE_OUTBOX_MAX_RETRIES
+            int "Maximum outbox retry attempts"
+            range 1 1000
+            default 10
+            help
+                Maximum retry attempts before a report is marked failed.
+
+        config QM_SCHEDULE_OUTBOX_ACK_TIMEOUT_SEC
+            int "Outbox event ACK timeout"
+            range 1 3600
+            default 30
+            help
+                Seconds to wait for scheduleReply before an event is retried.
+
+    endif
+
+endmenu

@@ -1,0 +1,16 @@
+menu "qm time"
+    
+    config QM_TIME_SUPPORT
+        bool "time support"
+        select QM_RTC_SUPPORT
+        default y 
+
+    if QM_TIME_SUPPORT
+    
+        config QM_TIMEZONE_MINUTESWEST
+            int "timezone minuteswest"
+            default 480 
+
+    endif
+
+endmenu

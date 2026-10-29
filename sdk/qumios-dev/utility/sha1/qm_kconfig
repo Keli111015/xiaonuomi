@@ -1,0 +1,7 @@
+menu "sha1"
+
+    config QM_SHA1
+        bool "qm sha1 support"
+        default "n"
+        
+endmenu

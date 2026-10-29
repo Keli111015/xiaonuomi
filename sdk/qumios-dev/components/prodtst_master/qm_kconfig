@@ -1,0 +1,53 @@
+menu "prodtst master"
+    config QM_BLE
+        bool "prodtst master support"
+        select QM_AT
+        select QM_LIST
+        default "n"
+
+    config QM_PRODTST_AP_SSID
+        string "prodtst ap prefix ssid"
+        default "xj_prodtst"
+
+    config QM_PRODTST_AP_PASSWD
+        string "prodtst ap passwd"
+        default "asdf062516"
+
+    config QM_PRODTST_WIFI_CHANNEL
+        int "prodtst wifi channel"
+        default 1
+
+    config QM_PRODTST_TCP_PORT
+        int "prodtst tcp port"
+        default 8888
+
+    config QM_PRODTST_TCP_PORT
+        int "prodtst tcp port"
+        default 8888
+        
+    config QM_PRODTST_TASK_PRIO
+        int "prodtst task prio"
+        default 19
+
+    config QM_PRODTST_OBJ_NUM
+        int "prodtst object num"
+        default 6
+
+    config QM_PRODTST_DATA_TABLE_NUM
+        int "prodtst data table num"
+        default 10
+
+    config QM_PRODTST_NOTIFY_QUEUE_NUM
+        int "prodtst notify queue num"
+        default 10
+
+    config QM_PRODTST_CMD_ACK_DEFAULT_TIMEOUT
+        int "prodtst cmd ack timeout"
+        default 2000
+
+    config QM_PRODTST_CMD_ACK_RSSI_TIMEOUT
+        int "prodtst cmd ack rssi timeout"
+        default 10000
+
+
+endmenu

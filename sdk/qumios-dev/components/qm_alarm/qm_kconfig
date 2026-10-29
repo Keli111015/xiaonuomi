@@ -1,0 +1,79 @@
+menu "qm alarm"
+
+    config QM_ALARM_SUPPORT
+        bool "qm alarm support"
+        default n
+        depends on QM_OS_SUPPORT && QM_TIME_SUPPORT && QM_KV_SUPPORT
+        depends on QM_OS_MUTEX_SUPPORT && QM_OS_TIMER_SUPPORT
+        depends on QM_OS_TASK_SUPPORT && QM_OS_QUEUE_SUPPORT && QM_OS_SEM_SUPPORT
+        depends on QM_WORK_SUPPORT
+        select QM_STRING
+        help
+            Enable the standalone device-side alarm component. The component
+            owns alarm runtime state, scheduling, storage, and optional cloud
+            protocol registration without depending on qm_agent.
+
+    if QM_ALARM_SUPPORT
+
+        config QM_ALARM_MAX_ALARMS
+            int "Alarm max alarms"
+            range 1 256
+            default 8
+
+        config QM_ALARM_SNOOZE_INTERVAL_MIN
+            int "Alarm default snooze interval (minutes)"
+            range 1 60
+            default 5
+
+        config QM_ALARM_TASK_STACK_SIZE
+            int "Alarm owner task stack size"
+            range 2048 16384
+            default 4096
+
+        config QM_ALARM_TASK_PRIO
+            int "Alarm owner task priority"
+            range 1 60
+            default 20
+
+        config QM_ALARM_LOG_CONFIG
+            bool "Enable qm_alarm log category configuration"
+            default n
+            help
+                Enable category-level default log controls for qm_alarm.
+                When disabled, error and lifecycle logs remain enabled.
+
+        if QM_ALARM_LOG_CONFIG
+
+            config QM_ALARM_LOG_ERROR
+                bool "Enable qm_alarm error logs"
+                default y
+
+            config QM_ALARM_LOG_LIFECYCLE
+                bool "Enable qm_alarm lifecycle logs"
+                default y
+
+            config QM_ALARM_LOG_CONTROL
+                bool "Enable qm_alarm control logs"
+                default n
+
+            config QM_ALARM_LOG_SCHEDULER
+                bool "Enable qm_alarm scheduler logs"
+                default n
+
+            config QM_ALARM_LOG_STORAGE
+                bool "Enable qm_alarm storage logs"
+                default n
+
+            config QM_ALARM_LOG_CLOUD
+                bool "Enable qm_alarm cloud logs"
+                default n
+
+            config QM_ALARM_LOG_STATS
+                bool "Enable qm_alarm statistics logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

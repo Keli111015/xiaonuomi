@@ -1,0 +1,22 @@
+menu "mDNS"
+
+config MDNS_SUPPORT
+    bool "mDNS service discovery"
+    default n
+    select QM_STRING
+    help
+        Enable the platform-independent DNS-SD query component. A target must
+        provide the QUMI UDP HAL with IPv4 multicast send support and receive
+        unicast replies on an ephemeral port.
+
+if MDNS_SUPPORT
+config MDNS_PACKET_SIZE
+    int "mDNS receive packet size"
+    default 1500
+    range 1500 4096
+    help
+        Size of the mDNS UDP receive buffer. The minimum Ethernet MTU avoids
+        silently accepting a normal-sized UDP response truncated by the HAL.
+endif
+
+endmenu

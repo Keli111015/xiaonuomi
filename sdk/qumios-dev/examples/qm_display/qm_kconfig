@@ -1,0 +1,15 @@
+menu "QUMI display protocol examples"
+
+    config QM_DISPLAY_CLIENT_EXAMPLE
+        bool "display protocol client example"
+        depends on QM_DISPLAY_CLIENT_SUPPORT
+        help
+            Build the UART transport example for the master-side display client.
+
+    config QM_DISPLAY_SERVER_EXAMPLE
+        bool "display protocol server example"
+        depends on QM_DISPLAY_SERVER_SUPPORT
+        help
+            Build the UART transport example for the screen-controller server.
+
+endmenu

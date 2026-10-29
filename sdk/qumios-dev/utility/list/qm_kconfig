@@ -1,0 +1,7 @@
+menu "list"
+
+    config QM_LIST
+        bool "qm list support"
+        default "n"
+        
+endmenu

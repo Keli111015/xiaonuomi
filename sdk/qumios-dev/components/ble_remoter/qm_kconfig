@@ -1,0 +1,41 @@
+menu "xjiang ble remoter"
+
+    config BLE_REMOTER_SUPPORT
+        bool "xjiang ble remoter"
+        default n
+
+    if BLE_REMOTER_SUPPORT
+
+        config BLE_REMOTER_MULTI_CONTROL_SUPPORT 
+            bool "support multi control"
+            default n
+            
+        config BLE_REMOTER_USE_BIGENDIAN_PID
+            bool "use big endian pid"
+            default n
+            
+        config BLE_REMOTER_NOT_USE_SCAN_UNIT
+            bool "not use scan unit (ms * 8 / 5)"
+            default n
+
+        config BLE_REMOTER_SCAN_INTERVAL 
+            int "scan interval (ms)"
+            default 40
+            range 20 1000
+
+        config BLE_REMOTER_SCAN_WINDOW 
+            int "scan window (ms)"
+            default 20
+            range 20 500
+
+        config BLE_REMOTER_FILTER_MAX_NUM 
+            int "filter max num"
+            default 10
+            range 1 20
+
+        config BLE_REMOTER_CMD_TABLE_MAX_NUM
+            int "cmd table max num"
+            default 20
+            range 1 50
+    endif
+endmenu

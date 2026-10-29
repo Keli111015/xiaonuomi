@@ -1,0 +1,59 @@
+menu "prodtst ble"
+
+    config PRODTST_BLE_ALLOC_SUPPORT
+        bool "config prodtst ble init user alloc"
+        default "y"
+
+    config PRODTST_BLE_USE_EXT_SCAN
+        bool "config prodtst ble user ext scan"
+        default "n"
+
+    config PRODTST_BLE_BUFF_LEN
+        int "config prodtst ble buff len"
+        default 64
+        range 32 2048 
+
+    config PRODTST_BLE_CLIENT
+        bool "config prodtst ble client support"
+        default "n"
+
+    if PRODTST_BLE_CLIENT
+            config PRODTST_BLE_CLIENT_TYPE_ADV
+                bool "config client adv type support"
+                default "n"
+            if PRODTST_BLE_CLIENT_TYPE_ADV
+                config PRODTST_BLE_CLIENT_ADV_REPORT
+                    bool "config  need error report in client adv type"
+                    default "y"
+                    
+            endif
+            config PRODTST_BLE_CLIENT_TYPE_CONN
+                bool "config client connect type support"
+                default "n"
+    endif
+
+    config PRODTST_BLE_SERVER
+        bool "config prodtst ble server support"
+        default "n"
+
+    config PRODTST_BLE_TX_TIMEOUT
+        int "config prodtst ble tx timeout (unit: ms)"
+        default 500
+        range 100 5000 
+
+    config PRODTST_BLE_ADV_INTERVAL
+        hex "config prodtst ble adv interval (unit: hex)"
+        default 0x20
+        range 0x20 0x4000
+
+    config PRODTST_BLE_SCAN_INTERVAL
+        hex "config prodtst ble Scan interval (unit: hex)"
+        default 0x10
+        range 0x4 0x4000 
+
+    config PRODTST_BLE_SCAN_WINDOWS
+        hex "config prodtst ble Scan windows (unit: hex)"
+        default 0x10
+        range 0x4 0x4000 
+
+endmenu

@@ -1,0 +1,21 @@
+menu "http"
+
+    config QM_HTTPS_SUPPORT
+        bool "https support"
+        select QM_NETWORK_TLS_SUPPORT
+        default "n"
+
+    config HTTP_DEBUG_PRINT
+        bool "http debug print"
+        default "y"
+        select QM_LOG
+
+    config HTTPCLIENT_CHUNK_SIZE
+        int "http client read buffer size"
+        default 1024
+
+    config HTTPCLIENT_SEND_BUF_SIZE
+        int "http client send buffer size"
+        default 512
+
+endmenu

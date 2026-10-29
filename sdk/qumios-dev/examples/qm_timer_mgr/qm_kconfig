@@ -1,0 +1,26 @@
+menu "qm timer mgr example config"
+
+    config QM_TIMER_MGR_EXAMPLE_CONFIG
+        bool "qm timer mgr example config"
+        default n
+
+    if QM_TIMER_MGR_EXAMPLE_CONFIG
+
+        config QM_TIMER_MGR_EXAMPLE_COUNTDOWN_SEC
+            int "Example countdown duration (seconds)"
+            range 1 4294967
+            default 5
+
+        config QM_TIMER_MGR_EXAMPLE_STOPWATCH_SEC
+            int "Example stopwatch run (seconds)"
+            range 1 4294967
+            default 2
+
+        config QM_TIMER_MGR_EXAMPLE_TICK_MS
+            int "Example tick period (ms)"
+            range 100 2147483647
+            default 1000
+
+    endif
+
+endmenu

@@ -1,0 +1,35 @@
+menu "sscanf"
+
+    config QM_SSCANF_SUPPORT
+        bool "qm sscanf support"
+        default "y"
+
+    if QM_SSCANF_SUPPORT
+
+    choice QM_SSCANF_MAX_INT
+        prompt "select sscanf maximum integer"
+        default QM_SSCANF_MAX_INT_32B
+        
+        config QM_SSCANF_MAX_INT_8B
+        bool "8bit"
+
+        config QM_SSCANF_MAX_INT_16B
+        bool "8bit"
+
+        config QM_SSCANF_MAX_INT_32B
+        bool "32bit"
+
+        config QM_SSCANF_MAX_INT_64B
+        bool "64bit"
+
+    endchoice
+
+    config QM_SSCANF_MAX_INT
+            int
+            default 1 if QM_SSCANF_MAX_INT_8B
+            default 2 if QM_SSCANF_MAX_INT_16B
+            default 4 if QM_SSCANF_MAX_INT_32B
+            default 8 if QM_SSCANF_MAX_INT_64B
+    endif
+
+endmenu

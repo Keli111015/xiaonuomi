@@ -1,0 +1,100 @@
+menu "qm mqtt client"
+
+    config QM_MQTT_CLIENT_SUPPORT
+        bool "qm mqtt client support"
+        default "n"
+        depends on QM_OS_SUPPORT
+        select QM_STRING
+        select QM_TIMER
+        select QM_LIST
+        help
+            Enable generic qumi MQTT client component.
+
+    if QM_MQTT_CLIENT_SUPPORT
+
+        config QM_MQTT_CLIENT_TASK_STACK_SIZE
+            int "MQTT client task stack size"
+            default 4096
+
+        config QM_MQTT_CLIENT_TASK_PRIORITY
+            int "MQTT client task priority"
+            default 5
+
+        config QM_MQTT_CLIENT_RX_BUF_SIZE
+            int "MQTT client RX buffer size"
+            default 4096
+
+        config QM_MQTT_CLIENT_TX_BUF_SIZE
+            int "MQTT client TX buffer size"
+            default 1024
+
+        config QM_MQTT_CLIENT_REQUEST_TIMEOUT_MS
+            int "MQTT client request timeout (ms)"
+            default 3000
+
+        config QM_MQTT_CLIENT_KEEPALIVE_INTERVAL_MS
+            int "MQTT client keepalive interval (ms)"
+            default 60000
+
+        config QM_MQTT_CLIENT_YIELD_TIMEOUT_MS
+            int "MQTT client yield timeout (ms)"
+            default 100
+
+        config QM_MQTT_CLIENT_STOP_WAIT_MS
+            int "MQTT client stop wait timeout (ms)"
+            default 3000
+
+        config QM_MQTT_CLIENT_SUBSCRIBE_MAX
+            int "MQTT client maximum subscription count"
+            default 20
+
+        config QM_MQTT_CLIENT_OUTBOX_MAX
+            int "MQTT client maximum in-flight packet count"
+            default 8
+
+        config QM_MQTT_CLIENT_SEND_QUEUE_MAX
+            int "MQTT client maximum pending send count"
+            default 8
+
+        config QM_MQTT_CLIENT_LOG_CONFIG
+            bool "Enable qm_mqtt_client log category configuration"
+            default n
+            help
+                Enable category-level logging for qm_mqtt_client.
+                When disabled, only error and lifecycle logs are enabled.
+
+        if QM_MQTT_CLIENT_LOG_CONFIG
+
+            config QM_MQTT_CLIENT_LOG_ERROR
+                bool "qm_mqtt_client error logs"
+                default y
+
+            config QM_MQTT_CLIENT_LOG_LIFECYCLE
+                bool "qm_mqtt_client lifecycle logs"
+                default y
+
+            config QM_MQTT_CLIENT_LOG_CONTROL
+                bool "qm_mqtt_client control logs"
+                default n
+
+            config QM_MQTT_CLIENT_LOG_UPLINK
+                bool "qm_mqtt_client uplink logs"
+                default n
+
+            config QM_MQTT_CLIENT_LOG_DOWNLINK
+                bool "qm_mqtt_client downlink logs"
+                default n
+
+            config QM_MQTT_CLIENT_LOG_PAYLOAD
+                bool "qm_mqtt_client payload logs"
+                default n
+
+            config QM_MQTT_CLIENT_LOG_STATS
+                bool "qm_mqtt_client statistics logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

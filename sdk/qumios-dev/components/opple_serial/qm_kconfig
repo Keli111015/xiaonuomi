@@ -1,0 +1,87 @@
+menu "opple serial"
+
+    config OPPLE_SERIAL_SUPPORT
+        bool "opple serial"
+        default n
+
+if OPPLE_SERIAL_SUPPORT
+
+    config OPPLE_SERIAL_UART_PORT
+        int "serial uart port"
+        default 1
+        range 0 20
+
+    config OPPLE_SERIAL_UART_BAUDRATE
+        int "serial uart baud rate"
+        default 9600
+        range 0 2000000
+
+    config OPPLE_SERIAL_UART_TX_PIN
+        int "serial uart tx pin"
+        default 1
+        range 1 20
+
+    config OPPLE_SERIAL_UART_RX_PIN
+        int "serial uart rx pin"
+        default 2
+        range 1 20
+
+    config OPPLE_SERIAL_RTOS_SUPPORT
+        bool "rtos support"
+        default "y"
+
+    config OPPLE_SERIAL_PRINTF_SUPPORT
+        bool "qm log printf support"
+        default "y"
+
+    config OPPLE_SERIAL_REPORT_SUPPORT
+        bool "serial report support"
+        default "y"
+
+    config OPPLE_SERIAL_RESEND_SUPPORT
+        bool "serial resend support"
+        default "y"
+
+    config OPPLE_SERIAL_SEND_INTERVAL_TIMEOUT_MS
+        int "serial send interval timeout"
+        default 200
+        range 0 500
+
+    config OPPLE_SERIAL_ACK_TIMEOUT_MS
+        int "serial ack timeout"
+        default 500
+        range 0 1000
+
+    config OPPLE_SERIAL_ID_CHECK_TIMEOUT_MS
+        int "serial id check timeout"
+        default 500
+        range 0 1000
+
+    config OPPLE_SERIAL_RECV_TIMEOUT_MS
+        int "serial recv loop timeout"
+        default 500
+        range 0 1000
+
+    config OPPLE_SERIAL_SEND_QUEUE_NUM
+        int "serial send queue size"
+        default 20
+        range 5 30
+
+    config OPPLE_SERIAL_DOWN_QUEUE_NUM
+        int "serial down queue size"
+        default 20
+        range 5 30
+
+    config OPPLE_SERIAL_SEND_RETRY_COUNT
+        int "serial retry send count"
+        default 1
+        range 0 2
+
+    config OPPLE_SERIAL_KV_MAX_SIZE
+        int "serial kv max size"
+        default 16
+        range 4 256
+
+endif
+
+endmenu

@@ -1,0 +1,8 @@
+menu "RTC XX8563 Driver"
+
+    config RTC_XX8563_SUPPORT
+        bool "rtc xx8563 support"
+        depends on QM_RTC_XX8563_SUPPORT
+        default "n"
+
+endmenu

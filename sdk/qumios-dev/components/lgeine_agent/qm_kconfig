@@ -1,0 +1,91 @@
+menu "lgeine_agent"
+
+    config LGEINE_AGENT_SUPPORT
+        bool "lgeine_agent support"
+        default n
+        depends on QM_OS_SUPPORT
+        depends on QM_OS_MUTEX_SUPPORT
+        depends on QM_OS_TIMER_SUPPORT
+        select QM_WEBSOCKET_CLIENT_SUPPORT
+        select QM_STRING
+        help
+            Enable the lgeine voice platform WebSocket protocol agent.
+
+    if LGEINE_AGENT_SUPPORT
+
+        config LGEINE_AGENT_WS_RX_SIZE
+            int "lgeine_agent WebSocket receive buffer size"
+            range 128 65536
+            default 4096
+
+        config LGEINE_AGENT_MAX_TEXT_MESSAGE_SIZE
+            int "lgeine_agent maximum JSON message size"
+            range 256 1048576
+            default 16384
+
+        config LGEINE_AGENT_NETWORK_TIMEOUT_MS
+            int "lgeine_agent network timeout (ms)"
+            range 1 2147483647
+            default 10000
+
+        config LGEINE_AGENT_HELLO_TIMEOUT_MS
+            int "lgeine_agent helloReply timeout (ms)"
+            range 1 2147483647
+            default 10000
+
+        config LGEINE_AGENT_RECONNECT_INTERVAL_MS
+            int "lgeine_agent reconnect interval (ms)"
+            range 1 2147483647
+            default 1000
+
+        config LGEINE_AGENT_WS_TASK_STACK_SIZE
+            int "lgeine_agent WebSocket task stack size"
+            range 1024 1048576
+            default 8192
+
+        config LGEINE_AGENT_WS_TASK_PRIORITY
+            int "lgeine_agent WebSocket task priority"
+            default 5
+
+        config LGEINE_AGENT_SEND_QUEUE_SIZE
+            int "lgeine_agent WebSocket send queue size"
+            range 1 1024
+            default 8
+
+        config LGEINE_AGENT_LOG_CONFIG
+            bool "Enable lgeine_agent log category configuration"
+            default n
+            help
+                When disabled, only error and lifecycle logs are enabled.
+
+        if LGEINE_AGENT_LOG_CONFIG
+
+            config LGEINE_AGENT_LOG_ERROR
+                bool "Enable lgeine_agent error logs"
+                default y
+
+            config LGEINE_AGENT_LOG_LIFECYCLE
+                bool "Enable lgeine_agent lifecycle logs"
+                default y
+
+            config LGEINE_AGENT_LOG_CONTROL
+                bool "Enable lgeine_agent control logs"
+                default n
+
+            config LGEINE_AGENT_LOG_UPLINK
+                bool "Enable lgeine_agent uplink logs"
+                default n
+
+            config LGEINE_AGENT_LOG_DOWNLINK
+                bool "Enable lgeine_agent downlink logs"
+                default n
+
+            config LGEINE_AGENT_LOG_PAYLOAD
+                bool "Enable lgeine_agent payload logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

@@ -1,0 +1,37 @@
+menu "xjiang http ota"
+
+    config XJIANG_HTTP_OTA_SUPPORT
+        bool "xjiang http ota support"
+        default "n"
+        depends on QM_HTTP_OTA_SUPPORT
+        depends on QM_HTTP_CLIENT_SUPPORT
+        select QM_JSON_PARSER_SUPPORT
+        help
+            Enable Ningbo Xiaojiang HTTP OTA version query and upgrade wrapper
+            based on qm_http_ota.
+
+    if XJIANG_HTTP_OTA_SUPPORT
+
+        config XJIANG_HTTP_OTA_TIMEOUT_MS
+            int "Xjiang OTA version query timeout (ms)"
+            range 1 2147483647
+            default 5000
+
+        config XJIANG_HTTP_OTA_HEADER_MAX
+            int "Xjiang OTA version response header max"
+            range 1 2147483647
+            default 2048
+
+        config XJIANG_HTTP_OTA_RESPONSE_BODY_MAX
+            int "Xjiang OTA version response body max"
+            range 1 2147483647
+            default 2048
+
+        config XJIANG_HTTP_OTA_RX_BUFFER_SIZE
+            int "Xjiang OTA version query rx buffer"
+            range 1 2147483647
+            default 512
+
+    endif
+
+endmenu

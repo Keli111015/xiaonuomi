@@ -1,0 +1,229 @@
+menu "qumios"
+
+choice
+    prompt "select qm os type"
+    default QM_OS_SUPPORT
+
+    config QM_OS_SUPPORT
+        bool "qm os support"
+    config QM_NOOS_SUPPORT
+        bool "qm no os support"
+endchoice
+
+choice
+    prompt "select software platform"
+    depends on QM_OS_SUPPORT
+    default SOFTWARE_PLATFORM_FREERTOS
+
+    config SOFTWARE_PLATFORM_FREERTOS
+        bool "freertos"
+    config SOFTWARE_PLATFORM_ALIOS_THINGS
+        bool "alios_things"
+    config SOFTWARE_PLATFORM_VELA
+        bool "miio_vela"
+endchoice
+
+config PLATFORM_FREERTOS_CPU_CLOCK_MHZ	
+    depends on SOFTWARE_PLATFORM_FREERTOS
+    int "freertos cpu clock MHZ (unit: MHZ)"
+    default 72
+
+config PLATFORM_FREERTOS_TOTAL_HEAP_SIZE
+    depends on SOFTWARE_PLATFORM_FREERTOS
+    int "freertos total heap size (unit: KB)"
+    default 30
+
+config QM_DRIVER_TASK_PRIO
+    int "qm driver task prio"
+    depends on QM_OS_SUPPORT
+    default 4 if SOFTWARE_PLATFORM_FREERTOS
+    range 0 20
+
+config QM_FRAMEWORK_TASK_PRIO
+    int "qm framework task prio"
+    depends on QM_OS_SUPPORT
+    default 3 if SOFTWARE_PLATFORM_FREERTOS
+    range 0 20
+
+config QM_APP_TASK_PRIO
+    int "qm application task prio"
+    depends on QM_OS_SUPPORT
+    default 2 if SOFTWARE_PLATFORM_FREERTOS
+    range 0 20
+
+menu "qmos api support"
+
+    config QM_OS_TASK_SUPPORT
+        bool "task support"
+        default "y"
+
+    config QM_OS_MUTEX_SUPPORT
+        bool "mutex support"
+        default "y"
+
+    config QM_OS_SEM_SUPPORT
+        bool "semaphore support"
+        default "y"
+
+    config QM_OS_QUEUE_SUPPORT
+        bool "queue support"
+        default "y"
+
+    config QM_OS_EVENT_SUPPORT
+        bool "event support"
+        default "y"
+
+    config QM_OS_TIMER_SUPPORT
+        bool "timer support"
+        default "y"
+
+endmenu
+
+config QM_CHECK_SUPPORT
+    bool "check support"
+    default "y"
+
+config QM_CHECK_SILENT
+    depends on QM_CHECK_SUPPORT
+    bool "check silent"
+    default "y"
+
+
+config QM_TYPE_SUPPORT
+    bool "qm type support"
+    default "y"
+
+if QM_TYPE_SUPPORT
+
+    menu "type config"
+
+        config QM_WITHOUT_MATH_H_SUPPORT
+        bool "qm not include math.h"
+        default "n"
+
+        config QM_WITHOUT_STDIO_H_SUPPORT
+        bool "qm not include stdio.h"
+        default "n"
+        
+        config QM_WITHOUT_STDBOOL_H_SUPPORT
+        bool "qm not include stdbool.h"
+        default "n"
+
+        config QM_TYPE_BOOL_SUPPORT
+        bool "qm type bool_t support"
+        default "y"
+
+        config QM_TYPE_INT8_SUPPORT
+        bool "qm type int8_t support"
+        default "n"
+
+        config QM_TYPE_UINT8_SUPPORT
+        bool "qm type uint8_t support"
+        default "n"
+
+        config QM_TYPE_INT16_SUPPORT
+        bool "qm type int16_t support"
+        default "n"
+
+        config QM_TYPE_UINT16_SUPPORT
+        bool "qm type uint16_t support"
+        default "n"
+
+        config QM_TYPE_INT32_SUPPORT
+        bool "qm type int32_t support"
+        default "n"
+
+        config QM_TYPE_UINT32_SUPPORT
+        bool "qm type uint32_t support"
+        default "n"
+
+        config QM_TYPE_SIZE_SUPPORT
+        bool "qm type size_t support"
+        default "n"
+
+        config QM_TYPE_INT64_SUPPORT
+        bool "qm type int64_t support"
+        default "n"
+
+        config QM_TYPE_FLOAT32_SUPPORT
+        bool "qm type float32_t support"
+        default "y"
+
+        config QM_TYPE_FLOAT64_SUPPORT
+        bool "qm type float64_t support"
+        default "y"
+
+
+
+    endmenu
+
+endif
+
+config QM_LOG_SUPPORT
+    bool "log support"
+    default "y"
+
+choice
+    prompt "select channel for log output"
+    depends on QM_LOG_SUPPORT
+    default QM_LOG_UART
+
+    config QM_LOG_UART
+        bool "qm log uart"
+        select QM_UART_SUPPORT
+    config QM_LOG_JTAG
+        bool "qm log jtag"
+    config QM_LOG_USB_CDC
+        bool "qm log usb cdc"
+endchoice
+
+if QM_LOG_SUPPORT
+if QM_LOG_UART
+    config QM_DEBUG_UART_PORT
+        int "debug uart port"
+        default 0
+
+    config QM_DEBUG_UART_BRAUDRATE
+        int "debug uart braudrate"
+        default 115200
+
+    config QM_DEBUG_UART_TX_PIN
+        int "debug uart tx pin"
+        default 1
+        
+    config QM_DEBUG_UART_RX_PIN
+        int "debug uart rx pine"
+        default 3
+endif
+    choice
+        prompt "select log output levels"
+        default LOG_SIMPLE
+
+        config LOG_SIMPLE
+            bool "log simple"
+
+        config LOG_DETAILS
+            bool "log details"
+    endchoice
+
+    config QM_ASSERT
+        bool "qm assert support"
+        default n 
+        
+    config QM_LOG_PROTECT_SUPPORT
+        bool "qm log protect support"
+        default n 
+        
+    config QM_LOG_HEX_CACHE_SUPPORT
+        bool "qm log hex cache support"
+        default n 
+        
+    config QM_LOG_HEX_CACHE_SIZE
+        depends on QM_LOG_HEX_CACHE_SUPPORT
+        int "cache of size"
+        default 32
+        range 8 1024
+
+endif
+
+endmenu

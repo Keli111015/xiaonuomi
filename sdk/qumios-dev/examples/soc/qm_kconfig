@@ -1,0 +1,10 @@
+menu "qm soc example config"
+
+    config QM_UART_EXAMPLE_CONFIG
+        bool "qm uart example config"
+        default n
+
+    if QM_UART_EXAMPLE_CONFIG
+
+    endif
+endmenu

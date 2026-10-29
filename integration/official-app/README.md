@@ -1,5 +1,7 @@
 # MorphCube 官方语音工程适配
 
+> 2026-10-29：完整SDK现已内置在仓库`sdk/`，新接手请按[完整工程说明](../../docs/FULL_REPOSITORY.md)直接构建。下方overlay接入保留供外部SDK及历史快照参考，不要对内置SDK再次应用。
+
 ## 当前接入方式（2026-10-29）
 
 使用`apply_overlay.py`和`sdk-overlay/`，覆盖全部当前SDK改动。下方“阶段1”及旧patch仅为历史记录，**不要在当前overlay上重复应用旧patch**。

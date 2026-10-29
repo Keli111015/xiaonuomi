@@ -1,0 +1,87 @@
+menu "qm http server"
+
+    config QM_HTTP_SERVER_SUPPORT
+        bool "qm http server support"
+        default "n"
+        depends on QM_OS_TASK_SUPPORT
+        help
+            Enable qumi HTTP/HTTPS server component. HTTPS mode uses qumi TLS
+            transport and requires the caller to provide a server
+            certificate and private key in qm_http_server_config_t.
+
+    if QM_HTTP_SERVER_SUPPORT
+
+        config QM_HTTP_SERVER_TIMEOUT_MS
+            int "HTTP server default timeout (ms)"
+            default 5000
+            help
+                Default timeout for HTTP server read and write operations.
+
+        config QM_HTTP_SERVER_HEADER_MAX
+            int "HTTP server maximum header size compatibility value"
+            default 1024
+            help
+                Default value for qm_http_server_config_t.max_header_len.
+                The qumi backend enforces this as the maximum request header
+                size accepted on each connection.
+
+        config QM_HTTP_SERVER_BODY_MAX
+            int "HTTP server maximum body size"
+            default 4096
+            help
+                Maximum HTTP request body size accepted by the server.
+
+        config QM_HTTP_SERVER_STACK
+            int "HTTP server task stack size"
+            default 4096
+            help
+                Task stack size for the HTTP server task.
+
+        config QM_HTTP_SERVER_PRIO
+            int "HTTP server task priority"
+            default 32
+            help
+                Task priority for the HTTP server task.
+
+        config QM_HTTP_SERVER_LOG_CONFIG
+            bool "Enable qm_http_server log category configuration"
+            default n
+            help
+                Enable category-level logging for qm_http_server.
+                When disabled, only error and lifecycle logs are enabled.
+
+        if QM_HTTP_SERVER_LOG_CONFIG
+
+            config QM_HTTP_SERVER_LOG_ERROR
+                bool "qm_http_server error logs"
+                default y
+
+            config QM_HTTP_SERVER_LOG_LIFECYCLE
+                bool "qm_http_server lifecycle logs"
+                default y
+
+            config QM_HTTP_SERVER_LOG_CONTROL
+                bool "qm_http_server control logs"
+                default n
+
+            config QM_HTTP_SERVER_LOG_UPLINK
+                bool "qm_http_server uplink logs"
+                default n
+
+            config QM_HTTP_SERVER_LOG_DOWNLINK
+                bool "qm_http_server downlink logs"
+                default n
+
+            config QM_HTTP_SERVER_LOG_PAYLOAD
+                bool "qm_http_server payload logs"
+                default n
+
+            config QM_HTTP_SERVER_LOG_STATS
+                bool "qm_http_server statistics logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

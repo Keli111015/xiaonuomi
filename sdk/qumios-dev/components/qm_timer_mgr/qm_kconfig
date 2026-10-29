@@ -1,0 +1,70 @@
+menu "qm timer mgr"
+
+    config QM_TIMER_MGR_SUPPORT
+        bool "qm timer mgr support"
+        default "n"
+        depends on QM_OS_TIMER_SUPPORT
+        depends on QM_OS_MUTEX_SUPPORT
+        help
+            Enable the qumi countdown / stopwatch timer manager component.
+
+    if QM_TIMER_MGR_SUPPORT
+
+        config QM_TIMER_MGR_DEFAULT_MODE
+            int "Default mode (0 countdown, 1 stopwatch)"
+            range 0 1
+            default 0
+            help
+                Default timer mode used when qm_timer_mgr_config_t.mode is 0.
+
+        config QM_TIMER_MGR_DEFAULT_DURATION_SEC
+            int "Default countdown duration (seconds)"
+            range 1 4294967
+            default 600
+            help
+                Default countdown duration used when the start duration is 0.
+
+        config QM_TIMER_MGR_TICK_MS
+            int "Default tick period (ms)"
+            range 100 2147483647
+            default 1000
+            help
+                Kernel timer period used to wake the component. It does not need
+                to divide durations; wall-clock advancement avoids drift.
+
+        config QM_TIMER_MGR_CLOUD_SUPPORT
+            bool "Enable qm_iot timer control and reporting"
+            default y
+            depends on QM_CLOUD_SUPPORT
+            select CJSON_LIB
+            help
+                Enable the optional qm_timer_mgr_cloud submodule. It owns the
+                protocol frames (down routing, reply/update report) while the
+                product policy is injected through qm_timer_mgr_cloud_config_t.
+
+        if QM_TIMER_MGR_CLOUD_SUPPORT
+
+            config QM_TIMER_MGR_CLOUD_METHOD
+                string "Cloud method name"
+                default "timer"
+                help
+                    qm_iot down method registered by the cloud submodule.
+
+            config QM_TIMER_MGR_CLOUD_QUEUE_LEN
+                int "Cloud command queue length"
+                range 1 64
+                default 4
+
+            config QM_TIMER_MGR_CLOUD_TASK_STACK_SIZE
+                int "Cloud task stack size"
+                default 4096
+
+            config QM_TIMER_MGR_CLOUD_TASK_PRIORITY
+                int "Cloud task priority"
+                default 20
+
+        endif
+
+    endif
+
+endmenu

@@ -1,0 +1,130 @@
+menu "TLV/DTTV/TTLV"
+
+config QM_TLV_SUPPORT
+    bool "tlv config"
+    default y
+    if QM_TLV_SUPPORT
+        config QM_TLV_TAG_SIZE
+            int "tlv length of tag"
+            default 1
+            range 1 2
+
+        config QM_TLV_LENGTH_SIZE
+            int "tlv length of len"
+            default 1
+            range 1 2
+
+        config QM_TLV_BYTES_SIZE
+            int "tlv length of buffer size"
+            default 4
+            range 4 512
+        
+        config QM_TLV_INT16_SUPPORT
+            bool "data type support(uint16_t/int16)"
+            default "y"
+
+        config QM_TLV_INT32_SUPPORT
+            bool "data type support(uint32_t/int32)"
+            default "y"
+
+        config QM_TLV_FLOAT32_SUPPORT
+            bool "data type support(float32)"
+            default "y"
+
+        config QM_TLV_INT64_SUPPORT
+            bool "data type support(uint64_t/int64)"
+            default "n"
+
+        config QM_TLV_BYTES_SUPPORT
+            bool "data type support bytes(string, bytes)"
+            default "y"
+    endif  
+
+config QM_DTTV_SUPPORT
+    bool "dttv config"
+    default y
+    if QM_DTTV_SUPPORT
+
+        config QM_DTTV_FORCE_UPDATE_SUPPORT
+            bool "support tv force update depend on the highest bit"
+            default "y"
+
+        config QM_DTTV_TAG_SIZE
+            int "tv length of tag"
+            default 1
+            range 1 2
+
+        config QM_DTTV_LENGTH_SIZE
+            int "tv length of len"
+            default 1
+            range 1 2
+
+        config QM_DTTV_BYTES_SIZE
+            int "tv length of buffer size"
+            default 4
+            range 4 512
+        
+        config QM_DTTV_INT16_SUPPORT
+            bool "data type support(uint16_t/int16)"
+            default "y"
+
+        config QM_DTTV_INT32_SUPPORT
+            bool "data type support(uint32_t/int32)"
+            default "y"
+
+        config QM_DTTV_FLOAT32_SUPPORT
+            bool "data type support(float32)"
+            default "y"
+
+        config QM_DTTV_INT64_SUPPORT
+            bool "data type support(uint64_t/int64)"
+            default "n"
+
+        config QM_DTTV_BYTES_SUPPORT
+            bool "data type support bytes(string, bytes, arrary)"
+            default "y"
+
+    endif
+
+    config QM_TTLV_SUPPORT
+    bool "ttlv config"
+    default y
+    if QM_TTLV_SUPPORT
+
+        config QM_TTLV_TAG_SIZE
+            int "tv length of tag"
+            default 1
+            range 1 2
+
+        config QM_TTLV_LENGTH_SIZE
+            int "tv length of len"
+            default 1
+            range 1 2
+
+        config QM_TTLV_BYTES_SIZE
+            int "tv length of buffer size"
+            default 4
+            range 4 512
+        
+        config QM_TTLV_INT16_SUPPORT
+            bool "data type support(uint16_t/int16)"
+            default "y"
+
+        config QM_TTLV_INT32_SUPPORT
+            bool "data type support(uint32_t/int32)"
+            default "y"
+
+        config QM_TTLV_FLOAT32_SUPPORT
+            bool "data type support(float32)"
+            default "y"
+
+        config QM_TTLV_INT64_SUPPORT
+            bool "data type support(uint64_t/int64)"
+            default "n"
+
+        config QM_TTLV_BYTES_SUPPORT
+            bool "data type support bytes(string, bytes, arrary)"
+            default "y"
+
+    endif
+endmenu

@@ -1,0 +1,46 @@
+menu "qm at server example config"
+
+    config QM_AT_SERVER_EXAMPLE_CONFIG
+        bool "qm at server example config"
+        default n
+
+    if QM_AT_SERVER_EXAMPLE_CONFIG
+
+        choice  
+            bool "at server os support"
+            default EXAMPLE_QM_AT_SERVER_OS_SUPPORT
+
+            config EXAMPLE_QM_AT_SERVER_OS_SUPPORT
+                bool "at server os support"
+                select QM_AT_SERVER_OS_SUPPORT
+            config EXAMPLE_QM_AT_SERVER_NOS_SUPPORT
+                bool "at server nos support"
+                select QM_WORK_SUPPORT 
+        endchoice
+
+    if EXAMPLE_QM_AT_SERVER_OS_SUPPORT
+        config EXAMPLE_UART_PORT
+            int "uart port"
+            default 1
+            range 1 3
+
+        config EXAMPLE_UART_BAUDRATE
+            int "uart baudrate"
+            default 9600
+
+        config EXAMPLE_UART_TX_PIN
+            int "uart tx pin"
+            default 9
+
+        config EXAMPLE_UART_RX_PIN
+            int "uart rx pin"
+            default 10
+    endif
+
+    config EXAMPLE_RECV_BUF_SIZE
+        int "recv buffer size"
+        default 128
+
+    endif
+    
+endmenu

@@ -1,0 +1,89 @@
+menu "qm provision"
+
+    config QM_PROVISION_SUPPORT
+        bool "qm provision (BLE WiFi provisioning)"
+        depends on QM_OS_SUPPORT
+        depends on QM_OS_MUTEX_SUPPORT && QM_OS_TIMER_SUPPORT
+        select QM_BLE
+        select QM_WORK_SUPPORT
+        default n
+
+    if QM_PROVISION_SUPPORT
+
+        config QM_PROVISION_LOG_CONFIG
+            bool "Enable qm_provision log category configuration"
+            default n
+            help
+                Enable category-level logging for qm_provision. When disabled,
+                only error and lifecycle logs are enabled.
+
+        if QM_PROVISION_LOG_CONFIG
+
+            config QM_PROVISION_LOG_ERROR
+                bool "qm_provision error logs"
+                default y
+
+            config QM_PROVISION_LOG_LIFECYCLE
+                bool "qm_provision lifecycle logs"
+                default y
+
+            config QM_PROVISION_LOG_PROTOCOL
+                bool "qm_provision protocol logs"
+                default n
+
+        endif
+
+        config QM_PROVISION_BLE_ADV_CID
+            string "Default BLE advertising CID"
+            default "xj"
+
+        config QM_PROVISION_NTP_TIMEZONE
+            int "Default timezone"
+            range -12 12
+            default 8
+
+        config QM_PROVISION_BLE_DEINIT_DELAY_MS
+            int "BLE disconnect-to-deinit delay (ms)"
+            range 0 5000
+            default 500
+
+        config QM_PROVISION_APINFO_ALT_FORMAT
+            bool "Support positional APINFO payload fallback"
+            default n
+            help
+                Parse the positional APINFO encoding used by some BLE clients
+                when the standard qm_spec property decoder finds no SSID.
+
+        config QM_PROVISION_BLE_LOCAL_NAME_MAX_LEN
+            int "BLE local name maximum content length"
+            range 1 24
+            default 24
+
+        config QM_PROVISION_SSID_MAX_LEN
+            int "WiFi SSID maximum content length"
+            range 1 32
+            default 32
+
+        config QM_PROVISION_PASSWORD_MAX_LEN
+            int "WiFi password maximum content length"
+            range 0 64
+            default 64
+
+        config QM_PROVISION_DYNREG_HOST_MAX_LEN
+            int "Dynamic registration host maximum content length"
+            range 0 255
+            default 127
+
+        config QM_PROVISION_AUDIO_URI_MAX_LEN
+            int "Audio URI maximum content length"
+            range 0 255
+            default 64
+
+        config QM_PROVISION_AUTHCODE_MAX_LEN
+            int "Authentication code maximum content length"
+            range 1 255
+            default 64
+
+    endif
+
+endmenu

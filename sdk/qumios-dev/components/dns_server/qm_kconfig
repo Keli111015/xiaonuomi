@@ -1,0 +1,31 @@
+menu "dns server"
+
+    config DNS_SERVER_SUPPORT
+        bool "dns server support"
+        default "n"
+
+        if DNS_SERVER_SUPPORT
+
+            config DNS_SERVER_PRINT
+                bool "dns server log printf"
+                default n
+
+            config DNS_SERVER_BUF_SIZE
+                int "dns server buf size"
+                default 128
+
+            config DNS_SERVER_TASK_SIZE
+                int "dns server task size"
+                default 4096
+
+            config DNS_SERVER_TASK_PRIO
+                int "dns server task prio"
+                default 20
+       
+            config DNS_DOMAIN_MAX_LEN
+                int "domain max len"
+                default 64
+                
+        endif
+        
+endmenu

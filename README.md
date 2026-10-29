@@ -6,12 +6,12 @@ MorphCube（小诺米）桌面学习陪伴机器人的黑客松板端原型仓�
 
 ## 同学从这里开始
 
-1. 克隆本仓库：`git clone https://github.com/Keli111015/xiaonuomi.git`。
-2. 单独克隆官方SDK，检出基线`89020f5e04bf777ae1672b8f3d320bc6e0ef3e0c`，按官方文档准备依赖和ESP-IDF。
-3. 使用[integration/official-app/README.md](integration/official-app/README.md)中的**当前overlay**，填写自己的本地产品配置，再编译。不要再叠加旧patch。
+1. 克隆本仓库：`git clone https://github.com/Keli111015/xiaonuomi.git`，官方完整源码已在`sdk/`，不用再克隆Gitee。
+2. 按[完整工程构建说明](docs/FULL_REPOSITORY.md)安装工具链、导出ESP-IDF环境。
+3. 填写自己的`ljyd_cloud_local.h`，运行`.\build_full_sdk.ps1`。日常代码直接修改`sdk/apps/main/`，不用再应用overlay或旧patch。
 4. 摄像头网页工具见[tools/camera](tools/camera/README.md)，SDK本机辅助脚本见[tools/sdk-local-helpers](tools/sdk-local-helpers/README.md)。
 
-当前源码覆盖保存在`integration/official-app/sdk-overlay/`，文件清单和哈希见`overlay-manifest.json`。真实产品密钥改为独立的`ljyd_cloud_local.h`，不提交。固件二进制可能包含产品配置，本仓库提供源码而不上传个人设备的固件、Flash备份、照片和日志。
+完整工程包含官方应用、QUMIOS、ESP-IDF、现有组件依赖、模型和资源。来源及许可证见[第三方说明](THIRD_PARTY_NOTICES.md)。`integration/official-app/sdk-overlay/`保留为上次同步快照，新开发以`sdk/`为准。真实产品密钥在独立的`ljyd_cloud_local.h`中，不提交；个人设备的固件、Flash备份、照片和日志也不上传。
 
 已有早期CAD脚本和参数保存在[cad/morphcube-v1a](cad/morphcube-v1a/README.md)，属于未完成真实装配验收的历史原型。
 
@@ -19,7 +19,7 @@ MorphCube（小诺米）桌面学习陪伴机器人的黑客松板端原型仓�
 
 ```powershell
 python -m unittest discover -s tools/camera -p "test_*.py"
-python integration/official-app/apply_overlay.py D:\dev\ljyd-sdk
+.\build_full_sdk.ps1 -ConfigureOnly
 ```
 
 ## 核心状态机与早期验证
@@ -49,7 +49,7 @@ docs/HANDOFF.md          硬件结果、已知边界与后续任务
 2. 使用官方仓库自带的 ESP-IDF 5.4.x 环境。
 3. 目标芯片为 ESP32-S3，实测板载 8 MB PSRAM、16 MB Flash。
 
-本仓库仅复制修改过的SDK文件，不附带完整官方依赖或真实产品密钥。请每位开发者自行克隆官方仓库、配置本地产品身份并设置 `IDF_PATH`。
+本仓库已内置官方SDK源码及依赖快照；每位开发者仍需安装编译工具链、配置自己的本地产品身份。工具链和组件求解可能需要联网。
 
 > Windows 路径要求：官方随包 ESP-IDF 的部分脚本在中文用户目录下存在编码问题。请把官方仓库、本仓库和 `IDF_TOOLS_PATH` 都放在不含中文或空格的短路径，例如 `D:\dev\ljyd_xjwb03_agent_public_developer`、`D:\dev\MorphCube-XJWB03` 和 `D:\esp-tools`，不要直接在 `C:\Users\中文用户名\...` 中安装工具或构建。
 

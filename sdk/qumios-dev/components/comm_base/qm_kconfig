@@ -1,0 +1,27 @@
+menu "comm base"
+
+    
+    config COMM_BASE_SUPPORT
+        bool "comm base support"
+        default n
+
+    if COMM_BASE_SUPPORT
+
+        config COMM_BASE_CMD_NUM
+            int "comm base cmd num"
+            default 10 if QM_AUDIO_DRIVER_GX8006
+            default 5
+
+        config COMM_BASE_RECV_BUF_MAX_LEN
+            int "comm base recv buf len"
+            default 1024 if QM_AUDIO_DRIVER_GX8006
+            default 64
+
+        config COMM_BASE_RECV_STEP_MAX_NUM
+            int "comm base recv step num"
+            default 6 if QM_AUDIO_DRIVER_GX8006
+            default 3
+
+    endif
+        
+endmenu

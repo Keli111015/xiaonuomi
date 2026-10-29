@@ -1,0 +1,3 @@
+/integration_tests/*/build
+/integration_tests/*/dependencies.lock
+/integration_tests/*/sdkconfig

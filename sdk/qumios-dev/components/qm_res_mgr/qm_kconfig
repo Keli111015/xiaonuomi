@@ -1,0 +1,180 @@
+menu "qm resource manager"
+
+    config QM_RES_MGR_SUPPORT
+        bool "qm resource manager support"
+        default "n"
+        depends on QM_OS_SUPPORT
+        select QM_HTTP_CLIENT_SUPPORT
+        select QM_STRING
+        help
+            Enable device-side resource list/detail and streaming download
+            manager based on qm_http_client.
+
+    if QM_RES_MGR_SUPPORT
+
+        choice QM_RES_MGR_METADATA_CHANNEL
+            prompt "qm_res_mgr metadata channel"
+            default QM_RES_MGR_HTTP_SUPPORT
+            help
+                Select exactly one metadata query channel for qm_res_mgr.
+                The generated qm_config.h only defines the selected
+                CONFIG_QM_RES_MGR_HTTP_SUPPORT or
+                CONFIG_QM_RES_MGR_MQTT_SUPPORT symbol. The unselected
+                channel macro is left undefined.
+
+            config QM_RES_MGR_HTTP_SUPPORT
+                bool "HTTP metadata"
+                help
+                    Use HTTPS metadata query for resource list, detail, and
+                    category APIs.
+
+            config QM_RES_MGR_MQTT_SUPPORT
+                bool "MQTT metadata"
+                depends on QM_CLOUD_SUPPORT
+                select QM_IOT_MQTT_SUPPORT
+                help
+                    Use MQTT device/up and device/down method messages for
+                    resource list and category metadata APIs.
+        endchoice
+
+        menu "Download common config"
+
+        config QM_RES_MGR_SEGMENT_SIZE
+            int "Resource download segment size"
+            default 1048576
+
+        config QM_RES_MGR_RETRY_MAX
+            int "Resource download retry max"
+            default 3
+
+        endmenu
+
+        if QM_RES_MGR_HTTP_SUPPORT || QM_RES_MGR_MQTT_SUPPORT
+
+            menu "Metadata shared config"
+
+            config QM_RES_MGR_PAGE_SIZE
+                int "Resource list page size"
+                default 10
+                help
+                    Page size used when qm_res_mgr_get_list() is called with
+                    page_size set to 0.
+
+            endmenu
+
+        endif
+
+        if QM_RES_MGR_HTTP_SUPPORT
+
+            menu "HTTP config"
+
+            config QM_RES_MGR_TIMEOUT_MS
+                int "Resource manager HTTP timeout (ms)"
+                default 15000
+                help
+                    Timeout used by HTTP metadata requests. The same value is
+                    also used by resource download when HTTP metadata mode is
+                    selected.
+
+            config QM_RES_MGR_HTTP_RX_BUF_SIZE
+                int "Resource manager HTTP read buffer"
+                default 1024
+                help
+                    HTTP read buffer size used by HTTP metadata requests. The
+                    same value is also used by resource download when HTTP
+                    metadata mode is selected.
+
+            config QM_RES_MGR_HTTP_HEADER_MAX
+                int "Resource manager HTTP header max"
+                default 2048
+                help
+                    Maximum HTTP header length used by HTTP metadata requests.
+                    The same value is also used by resource download when HTTP
+                    metadata mode is selected.
+
+            config QM_RES_MGR_API_BODY_MAX
+                int "Resource API response body max"
+                default 16384
+                help
+                    Maximum list/detail API response body accepted by qm_res_mgr.
+                    The component uses this value as a limit while growing the
+                    response buffer dynamically; it does not preallocate this size.
+
+            choice QM_RES_MGR_DEFAULT_ENV
+                prompt "Resource API default environment"
+                default QM_RES_MGR_ENV_PROD
+                help
+                    Select the default Resource API environment. Product code can
+                    switch environment at runtime with qm_res_mgr_set_env().
+
+                config QM_RES_MGR_ENV_DEV
+                    bool "Development"
+
+                config QM_RES_MGR_ENV_TEST
+                    bool "Test"
+
+                config QM_RES_MGR_ENV_PROD
+                    bool "Production"
+            endchoice
+
+            endmenu
+
+        endif
+
+        if QM_RES_MGR_MQTT_SUPPORT
+
+            menu "MQTT metadata config"
+
+            config QM_RES_MGR_MQTT_TIMEOUT_MS_DEFAULT
+                int "Resource manager MQTT reply timeout (ms)"
+                default 5000
+                help
+                    Default reply wait timeout used when the caller passes
+                    timeout_ms as 0 in MQTT metadata requests.
+
+            endmenu
+
+        endif
+
+        config QM_RES_MGR_LOG_CONFIG
+            bool "Enable qm_res_mgr log category configuration"
+            default n
+            help
+                Enable category-level qm_res_mgr log configuration. When
+                disabled, qm_res_mgr keeps only error and lifecycle logs.
+
+        if QM_RES_MGR_LOG_CONFIG
+
+            config QM_RES_MGR_LOG_ERROR
+                bool "qm_res_mgr error logs"
+                default y
+
+            config QM_RES_MGR_LOG_LIFECYCLE
+                bool "qm_res_mgr lifecycle logs"
+                default y
+
+            config QM_RES_MGR_LOG_CONTROL
+                bool "qm_res_mgr control logs"
+                default n
+
+            config QM_RES_MGR_LOG_METADATA
+                bool "qm_res_mgr metadata logs"
+                default n
+
+            config QM_RES_MGR_LOG_DOWNLOAD
+                bool "qm_res_mgr download logs"
+                default n
+
+            config QM_RES_MGR_LOG_PAYLOAD
+                bool "qm_res_mgr payload logs"
+                default n
+
+            config QM_RES_MGR_LOG_STATS
+                bool "qm_res_mgr statistics logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

@@ -1,0 +1,79 @@
+menu "qm http ota"
+
+    config QM_HTTP_OTA_SUPPORT
+        bool "qm http ota support"
+        default "n"
+        depends on QM_HTTP_CLIENT_SUPPORT
+        depends on QM_KV_SUPPORT
+        select QM_CRC32
+        select QM_HMAC
+        select QM_SHA256
+        help
+            Enable HTTP OTA component based on qm_http_client. The default SoC
+            target uses qm_ota, while MCU target uses caller-provided callbacks.
+
+    if QM_HTTP_OTA_SUPPORT
+
+        config QM_HTTP_OTA_TIMEOUT_MS
+            int "HTTP OTA default timeout (ms)"
+            range 1 2147483647
+            default 15000
+            help
+                Default timeout for HTTP OTA download operations.
+
+        config QM_HTTP_OTA_HEADER_MAX
+            int "HTTP OTA maximum header size"
+            range 1 2147483647
+            default 2048
+            help
+                Maximum HTTP response header size accepted by OTA.
+
+        config QM_HTTP_OTA_RX_BUFFER_SIZE
+            int "HTTP OTA receive buffer size"
+            range 1 2147483647
+            default 1024
+            help
+                Receive buffer size used by OTA streaming reads.
+
+        config QM_HTTP_OTA_LOG_CONFIG
+            bool "Enable qm_http_ota log category configuration"
+            default n
+            help
+                Enable category-level logging for qm_http_ota.
+                When disabled, only error and lifecycle logs are enabled.
+
+        if QM_HTTP_OTA_LOG_CONFIG
+
+            config QM_HTTP_OTA_LOG_ERROR
+                bool "qm_http_ota error logs"
+                default y
+
+            config QM_HTTP_OTA_LOG_LIFECYCLE
+                bool "qm_http_ota lifecycle logs"
+                default y
+
+            config QM_HTTP_OTA_LOG_CONTROL
+                bool "qm_http_ota control logs"
+                default n
+
+            config QM_HTTP_OTA_LOG_DOWNLOAD
+                bool "qm_http_ota download logs"
+                default n
+
+            config QM_HTTP_OTA_LOG_PAYLOAD
+                bool "qm_http_ota payload logs"
+                default n
+
+            config QM_HTTP_OTA_LOG_VERIFY
+                bool "qm_http_ota verification logs"
+                default n
+
+            config QM_HTTP_OTA_LOG_STATS
+                bool "qm_http_ota statistics logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

@@ -1,0 +1,7 @@
+menu "base64"
+
+    config QM_BASE64
+        bool "qm base64 support"
+        default "n"
+        
+endmenu

@@ -1,0 +1,44 @@
+menu "VB701N audio driver"
+
+config QM_VB701N_SUPPORT
+    bool
+    help
+        Internal protocol-driver build flag selected by the qm_audio VB701N
+        device backend.
+
+if QM_VB701N_SUPPORT
+
+config QM_VB701N_UART_PORT
+    int "UART port"
+    default 1
+
+config QM_VB701N_UART_BAUDRATE
+    int "UART baud rate"
+    range 9600 3000000
+    default 2000000
+
+config QM_VB701N_UART_TX_PIN
+    int "UART TX GPIO"
+    default 40
+
+config QM_VB701N_UART_RX_PIN
+    int "UART RX GPIO"
+    default 39
+
+config QM_VB701N_FLOW_GPIO
+    int "Module flow-control GPIO"
+    default 38
+    help
+        High means the module is not ready for the next speaker frame.
+
+config QM_VB701N_TX_INTERVAL_MS
+    int "Minimum speaker frame interval (ms)"
+    range 1 100
+    default 5
+    help
+        PCM is 320 bytes / 10 ms. Two frames are sent per burst, so the
+        default gap is 5 ms when the flow pin is idle.
+
+endif
+
+endmenu

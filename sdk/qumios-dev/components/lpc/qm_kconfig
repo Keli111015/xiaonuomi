@@ -1,0 +1,10 @@
+menu "QUMI low-power controller"
+
+config QM_LPC_SUPPORT
+    bool "low-power policy/veto support"
+    default y
+    depends on QM_OS_SUPPORT
+    depends on QM_OS_MUTEX_SUPPORT
+    select QM_LIST
+
+endmenu

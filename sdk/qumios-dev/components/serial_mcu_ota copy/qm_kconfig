@@ -1,0 +1,32 @@
+menu "serial mcu ota"
+
+    config SERIAL_MCU_OTA_SUPPORT
+        bool "serial mcu ota support"
+        default "n"
+        select QM_UART_SUPPORT
+        select QM_TIMER
+        help
+            Enable the independent MCU OTA channel using commands
+            0x35 to 0x39. This component does not replace the old serial_ota
+            implementation.
+
+    if SERIAL_MCU_OTA_SUPPORT
+
+        config SERIAL_MCU_OTA_CHUNK_SIZE
+            int "default OTA data chunk size"
+            range 1 1024
+            default 512
+
+        config SERIAL_MCU_OTA_TIMEOUT_MS
+            int "ACK timeout in milliseconds"
+            range 1 2147483647
+            default 1000
+
+        config SERIAL_MCU_OTA_RETRY_MAX
+            int "maximum ACK timeout retry count"
+            range 0 255
+            default 3
+
+    endif
+
+endmenu

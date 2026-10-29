@@ -1,0 +1,124 @@
+menu "qm at"
+
+    config QM_AT_SERVER
+        bool "at server"
+        default y
+
+    if QM_AT_SERVER
+
+        config QM_AT_SERVER_MAX_NUM
+            int "at server max num"
+            default 3
+            range 1 10
+
+        config QM_AT_SERVER_TASK_SIZE
+            int "at server task size"
+            default 2048
+
+        config QM_AT_SERVER_TASK_PRIO
+            int "at server task prio"
+            default 20
+
+        config QM_AT_SERVER_OS_SUPPORT
+            bool "at server os support"
+            default y if QM_OS_SUPPORT
+
+        config QM_AT_SERVER_BASE_CMD_SUPPORT
+            bool "at server base cmd support"
+            default y
+
+    endif
+
+    config QM_AT_CLIENT
+        bool "at client"
+        default n
+
+    if QM_AT_CLIENT
+
+        config QM_AT_CLIENT_MAX_NUM
+            int "at client max num"
+            default 3
+            range 1 20
+
+        config QM_AT_CLIENT_TASK_SIZE
+            int "at client task size"
+            default 2048
+
+        config QM_AT_CLIENT_TASK_PRIO
+            int "at client task prio"
+            default 20
+
+        config QM_AT_CMD_TABLE_MAX_NUM
+            int "at cmd table max num"
+            default 10
+            range 1 20
+            
+        config QM_AT_URC_TABLE_MAX_NUM
+            int "at urc table max num"
+            default 3
+            range 1 10
+
+    endif
+
+    if QM_AT_SERVER || QM_AT_CLIENT
+        config QM_AT_PRINT_RAW_CMD
+            bool "at print raw cmd"
+            default n
+
+        config QM_AT_CMD_NAME_MAX_LEN
+            int "at cmd name max len"
+            default 16
+            range 16  60
+
+        config QM_AT_CMD_MAX_LEN
+            int "at cmd max len"
+            default 32
+            range 32  128
+
+        config QM_AT_CMD_TABLE_MAX_NUM
+            int "at cmd TAX max len"
+            default 3
+            range 1  10
+
+        config QM_AT_LOG_CONFIG
+            bool "Enable qm_at log category configuration"
+            default n
+            help
+                Enable category-level logging for qm_at.
+                When disabled, only error and lifecycle logs are enabled.
+
+        if QM_AT_LOG_CONFIG
+
+            config QM_AT_LOG_ERROR
+                bool "qm_at error logs"
+                default y
+
+            config QM_AT_LOG_LIFECYCLE
+                bool "qm_at lifecycle logs"
+                default y
+
+            config QM_AT_LOG_CONTROL
+                bool "qm_at control logs"
+                default n
+
+            config QM_AT_LOG_UPLINK
+                bool "qm_at uplink logs"
+                default n
+
+            config QM_AT_LOG_DOWNLINK
+                bool "qm_at downlink logs"
+                default n
+
+            config QM_AT_LOG_PAYLOAD
+                bool "qm_at payload logs"
+                default n
+
+            config QM_AT_LOG_STATS
+                bool "qm_at statistics logs"
+                default n
+
+        endif
+    endif
+
+
+endmenu

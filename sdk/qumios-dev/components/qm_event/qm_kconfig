@@ -1,0 +1,32 @@
+menu "qm work"
+
+    config QM_WORK_SUPPORT
+        bool "qm work support"
+        default "y"
+
+        if QM_WORK_SUPPORT
+
+            config QM_WORKQUEUE_NO_TASK
+                bool "qm workqueue no task"
+                default "n"
+
+            config QM_EVENT_NUM
+                int "qm event num"
+                default 10
+                range 5 50
+
+            config QM_WORKQUEUE_TASK_SIZE
+                int "workqueue task size"
+                default 2048
+
+            config QM_WORKQUEUE_TASK_PRIO
+                int "workqueue task prio"
+                default 20
+
+            config QM_WORKQUEUE_NUM
+                int "workqueue num"
+                default 10
+                range 5 200
+        endif
+        
+endmenu

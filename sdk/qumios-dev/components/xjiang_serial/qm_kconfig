@@ -1,0 +1,136 @@
+menu "xjiang serial"
+
+    config QM_SERIAL_UART_PORT
+        int "serial uart port"
+        default 1
+        range 0 20
+
+    config QM_SERIAL_UART_BAUDRATE
+        int "serial uart baud rate"
+        default 9600
+        range 0 2000000
+
+    config QM_SERIAL_UART_TX_PIN
+        int "serial uart tx pin"
+        default 1
+        range 1 100
+
+    config QM_SERIAL_UART_RX_PIN
+        int "serial uart rx pin"
+        default 2
+        range 1 100
+
+    config QM_SERIAL_RTOS_SUPPORT
+        bool "rtos support"
+        default "y"
+
+    config QM_SERIAL_RESEND_SUPPORT
+        bool "resend support"
+        default "y"
+
+    config QM_SERIAL_OTA_SUPPORT
+        bool "mcu ota support"
+        default "y"
+
+    config SERIAL_MCU_OTA_SUPPORT
+        bool "serial mcu ota protocol support"
+        default "n"
+
+    config QM_SERIAL_RAW_SUPPORT
+        bool "raw data support"
+        default "y"
+
+    config QM_SERIAL_LOWPOWER_SUPPORT
+        bool "lowpower support"
+        default "y"
+
+    config QM_SERIAL_HEARTBEAT_NOTIFY_SUPPORT
+        bool "heartbeat notify support"
+        default "y"
+
+    config QM_SERIAL_PRINTF_SUPPORT
+        bool "qm log printf support"
+        default "y"
+
+    choice
+        prompt "choice report method"
+        default QM_SERIAL_REPORT_NOTIFY_SUPPORT
+
+        config QM_SERIAL_REPORT_NOTIFY_SUPPORT
+            bool "report notify"
+
+        config QM_SERIAL_ONLY_REPORT_NOTIFY_SUPPORT
+            bool "only report notify"
+            comment "just notify report event"
+            
+    endchoice
+
+    config QM_SERIAL_EVENT_SUPPORT
+        bool "event support"
+        default "y"
+        if QM_SERIAL_EVENT_SUPPORT
+
+            choice
+                prompt "choice event report method"
+                default QM_SERIAL_EVENT_NOTIFY_SUPPORT
+
+                config QM_SERIAL_EVENT_NOTIFY_SUPPORT
+                    bool "event notify"
+
+                config QM_SERIAL_EVENT_ONLY_NOTIFY_SUPPORT
+                    bool "only event notify"
+                    comment "just notify event"
+                
+            endchoice
+
+            config QM_SERIAL_EVENT_MAX_NUM
+                int "event buffer size"
+                default 10
+                range 1 20
+
+        endif
+
+    config QM_SERIAL_ACTION_SUPPORT
+        bool "action support"
+        default "y"
+
+
+
+    config QM_SERIAL_SEND_INTERVAL_TIMEOUT_MS
+        int "serial send interval timeout"
+        default 200
+        range 50 500
+
+    config QM_SERIAL_ACK_TIMEOUT_MS
+        int "serial ack timeout"
+        default 500
+        range 100 1000
+
+
+    config QM_SERIAL_ID_CHECK_TIMEOUT_MS
+        int "serial id check timeout"
+        default 500
+        range 100 1000
+
+    config QM_SERIAL_RECV_TIMEOUT_MS
+        int "serial recv loop timeout"
+        default 500
+        range 100 1000
+
+    config QM_SERIAL_SEND_QUEUE_NUM
+        int "serial send queue size"
+        default 20
+        range 5 30
+
+    config QM_SERIAL_DOWN_QUEUE_NUM
+        int "serial send queue size"
+        default 20
+        range 5 30
+
+    config QM_SERIAL_SEND_RETRY_COUNT
+        int "serial retry send count"
+        default 1
+        range 0 2
+
+        
+endmenu

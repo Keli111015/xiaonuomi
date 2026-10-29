@@ -1,0 +1,7 @@
+mainmenu "QUMIOS Development Framework Configuration"
+source "${QDF_PATH}/drivers/qm_kconfig"    
+source "${QDF_PATH}/include/qmos/qm_kconfig"   
+source "${QDF_PATH}/include/hal/qm_kconfig"  
+source "${QDF_PATH}/board/qm_kconfig"  
+source "${QDF_PATH}/components/qm_kconfig"  
+source "${QDF_PATH}/utility/qm_kconfig"  

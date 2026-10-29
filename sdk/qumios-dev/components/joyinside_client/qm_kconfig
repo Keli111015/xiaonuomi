@@ -1,0 +1,244 @@
+menu "joyinside_client"
+
+    config JOYINSIDE_CLIENT_SUPPORT
+        bool "joyinside_client support"
+        default "n"
+        depends on QM_OS_SUPPORT
+        depends on QM_OS_TASK_SUPPORT
+        depends on QM_OS_MUTEX_SUPPORT
+        depends on QM_OS_QUEUE_SUPPORT
+        depends on QM_OS_SEM_SUPPORT
+        select QM_WEBSOCKET_CLIENT_SUPPORT
+        select QM_STRING
+        select QM_UUID
+        select QM_BASE64
+        select QM_TIME_SUPPORT
+        select QM_BACKOFF_SUPPORT
+        help
+            Enable JoyInside Client realtime voice WebSocket component built on QUMI
+            components. HTTP auth/register is controlled separately.
+
+    if JOYINSIDE_CLIENT_SUPPORT
+
+        # Generates CONFIG_JOYINSIDE_CLIENT_AUDIO_BINARY in qm_config.h.
+        config JOYINSIDE_CLIENT_AUDIO_BINARY
+            bool "Default JoyInside audio transport to binary"
+            default y
+            help
+                Default for input_transport/output_transport when omitted.
+                Both wire formats are available at runtime. End-side VAD with
+                default input_transport selects Base64 to carry content.mid.
+
+        config JOYINSIDE_CLIENT_VISION_SUPPORT
+            bool "JoyInside session-bound JPEG reporting"
+            default n
+            select QM_HTTP_CLIENT_SUPPORT
+            help
+                Add synchronous HTTP image/report on an application worker.
+                JPEG Base64 is streamed without allocating a full encoded copy.
+
+        # Generates CONFIG_JOYINSIDE_CLIENT_MANUAL_CALL in qm_config.h.
+        config JOYINSIDE_CLIENT_MANUAL_CALL
+            bool "Use JoyInside Client manual call mode"
+            default n
+            help
+                Enable manual call mode. When enabled, JoyInside Client appends
+                needManualCall=true to the WebSocket URI and exposes
+                joyinside_client_send_audio_finish() for ending manual audio upload.
+                Leave disabled for free conversation mode to omit that API and
+                runtime mode state.
+
+        config JOYINSIDE_CLIENT_AUTH_SUPPORT
+            bool "JoyInside Client HTTP auth/register support"
+            default "n"
+            select QM_HTTP_CLIENT_SUPPORT
+            select QM_HMAC
+            select QM_MD5
+            help
+                Enable optional JoyInside Client token and device registration APIs.
+
+        config JOYINSIDE_CLIENT_WS_RX_SIZE
+            int "JoyInside Client WebSocket receive buffer size"
+            default 4096
+
+        config JOYINSIDE_CLIENT_MAX_TEXT_SIZE
+            int "Maximum complete JoyInside JSON message size"
+            range 1024 1048576
+            default 65536
+            help
+                Bounded reassembly across receive chunks and continuation frames.
+                Oversized messages are discarded through their final frame.
+
+        config JOYINSIDE_CLIENT_TOKEN_SIZE
+            int "Token provider output capacity including terminator"
+            range 256 16384
+            default 4096
+
+        config JOYINSIDE_CLIENT_TIMEOUT_MS
+            int "JoyInside Client network timeout (ms)"
+            default 5000
+
+        config JOYINSIDE_CLIENT_SEND_RETRY_COUNT
+            int "JoyInside Client text send timeout retry count"
+            default 2
+            range 0 10
+            help
+                Retry WebSocket text/control message enqueue when the send queue
+                times out. Binary audio frames are not retried to avoid duplicate
+                audio payloads.
+
+        config JOYINSIDE_CLIENT_SEND_RETRY_DELAY_MS
+            int "JoyInside Client text send retry delay (ms)"
+            default 100
+            range 0 60000
+
+        config JOYINSIDE_CLIENT_ACK_TIMEOUT_MS
+            int "JoyInside Client server ack timeout (ms)"
+            default 5000
+            range 0 60000
+            help
+                Maximum time to wait for a server acknowledgement after sending
+                a message that requires business ack. CLIENT_VOICE_CHAT_UPDATE
+                currently uses this framework and waits for SERVER_VOICE_CHAT_UPDATED.
+                A timeout reconnects and negotiates on a new channel. Voice
+                updates are never replayed on the same connection. Set to 0
+                to disable the watchdog (not recommended).
+
+        # Generates CONFIG_JOYINSIDE_CLIENT_MEDIA_SUPPORT in qm_config.h.
+        config JOYINSIDE_CLIENT_MEDIA_SUPPORT
+            bool "JoyInside Client media playback support"
+            default n
+            depends on JOYINSIDE_CLIENT_SUPPORT
+            help
+                Enable the optional AUDIO_BOOK media playback submodule. It
+                consumes AUDIO_BOOK events and controls an application-injected
+                asynchronous player backend. The backend implements MP3 URL
+                playback at an absolute start position and bridge TTS drain.
+
+        config JOYINSIDE_CLIENT_MEDIA_TASK_STACK_SIZE
+            int "JoyInside Client media worker task stack size"
+            default 4096
+
+        config JOYINSIDE_CLIENT_MEDIA_TASK_PRIORITY
+            int "JoyInside Client media worker task priority"
+            default 20
+
+        config JOYINSIDE_CLIENT_MEDIA_QUEUE_LEN
+            int "JoyInside Client media worker command queue length"
+            range 4 32
+            default 8
+
+        config JOYINSIDE_CLIENT_AUTO_RECONNECT
+            bool "JoyInside Client WebSocket auto reconnect"
+            default y
+            help
+                Enable client-owned reconnect with bounded jitter after errors.
+                Every attempt obtains a token and a fresh requestId. The client
+                renegotiates voice configuration and restores saved chat context;
+                CONNECTED means the negotiated audio format has been confirmed.
+
+        config JOYINSIDE_CLIENT_WS_TASK_STACK_SIZE
+            int "JoyInside Client WebSocket task stack size"
+            default 8192
+
+        config JOYINSIDE_CLIENT_WS_TASK_PRIORITY                        
+            int "JoyInside Client WebSocket task priority"
+            default 20
+
+        config JOYINSIDE_CLIENT_CORE_TASK_STACK_SIZE
+            int "JoyInside Client core task stack size"
+            default 4096
+
+        config JOYINSIDE_CLIENT_CORE_TASK_PRIORITY
+            int "JoyInside Client core task priority"
+            default 20
+
+        config JOYINSIDE_CLIENT_CORE_STOP_TIMEOUT_MS
+            int "JoyInside Client core stop budget (ms)"
+            range 100 10000
+            default 6000
+
+        config JOYINSIDE_CLIENT_SEND_QUEUE_SIZE
+            int "JoyInside Client WebSocket send queue size"
+            default 8
+
+        config JOYINSIDE_CLIENT_AUDIO_QUEUE_LEN
+            int "JoyInside Client preallocated audio slots"
+            range 1 64
+            default 8
+
+        config JOYINSIDE_CLIENT_AUDIO_PACKET_BYTES
+            int "JoyInside Client maximum accepted audio chunk (bytes)"
+            range 256 16384
+            default 4096
+
+        config JOYINSIDE_CLIENT_HEARTBEAT_INTERVAL_MS
+            int "JoyInside Client application heartbeat interval (ms)"
+            default 30000
+
+        config JOYINSIDE_CLIENT_HEARTBEAT_TIMEOUT_MS
+            int "JoyInside Client application heartbeat response timeout (ms)"
+            default 3000
+            help
+                Maximum time to wait for a JSON PONG after a PING.
+                Set to 0 to disable the application-level response watchdog.
+
+        config JOYINSIDE_CLIENT_LOG_CONFIG
+            bool "Enable JoyInside Client log category configuration"
+            default n
+            help
+                Enable category-level default log controls for JoyInside Client.
+                When disabled, the component keeps only error and lifecycle logs
+                enabled by default.
+
+        if JOYINSIDE_CLIENT_LOG_CONFIG
+
+            config JOYINSIDE_CLIENT_LOG_ERROR
+                bool "Enable JoyInside Client error logs"
+                default y
+
+            config JOYINSIDE_CLIENT_LOG_LIFECYCLE
+                bool "Enable JoyInside Client lifecycle logs"
+                default y
+
+            config JOYINSIDE_CLIENT_LOG_CONTROL
+                bool "Enable JoyInside Client control logs"
+                default n
+
+            config JOYINSIDE_CLIENT_LOG_UPLINK
+                bool "Enable JoyInside Client uplink logs"
+                default n
+
+            config JOYINSIDE_CLIENT_LOG_DOWNLINK
+                bool "Enable JoyInside Client downlink logs"
+                default n
+
+            config JOYINSIDE_CLIENT_LOG_PAYLOAD
+                bool "Enable JoyInside Client payload logs"
+                default n
+
+            config JOYINSIDE_CLIENT_LOG_STATS
+                bool "Enable JoyInside Client statistics logs"
+                default n
+
+        endif
+
+        if JOYINSIDE_CLIENT_AUTH_SUPPORT
+
+            config JOYINSIDE_CLIENT_HTTP_BODY_SIZE
+                int "JoyInside Client HTTP response buffer size"
+                default 2048
+
+            config JOYINSIDE_CLIENT_MAX_RETRIES
+                int "JoyInside Client HTTP max retries"
+                default 2
+
+            config JOYINSIDE_CLIENT_BASE_DELAY_MS
+                int "JoyInside Client HTTP retry base delay (ms)"
+                default 500
+
+        endif
+
+    endif
+
+endmenu

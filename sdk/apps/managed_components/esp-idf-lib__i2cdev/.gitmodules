@@ -1,0 +1,3 @@
+[submodule "eil-cmake-utils"]
+	path = eil-cmake-utils
+	url = https://github.com/esp-idf-lib/eil-cmake-utils.git

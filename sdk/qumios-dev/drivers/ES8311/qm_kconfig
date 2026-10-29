@@ -1,0 +1,3 @@
+config QM_ES8311_SUPPORT
+    bool "ES8311 support"
+    default "n"

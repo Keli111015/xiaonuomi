@@ -1,0 +1,8 @@
+menu "RTC XX1302 Driver"
+
+    config RTC_XX1302_SUPPORT
+        bool "rtc xx1302 support"
+        depends on QM_RTC_XX1302_SUPPORT
+        default "n"
+
+endmenu

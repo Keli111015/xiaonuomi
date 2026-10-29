@@ -1,0 +1,35 @@
+menu "sprintf"
+
+    config QM_SPRINTF_SUPPORT
+        bool "qm sprintf support"
+        default "y"
+
+
+    if QM_SPRINTF_SUPPORT
+
+        config QM_PRINTF_SUPPORT_FLOAT
+        bool "float support"
+        default "y"
+
+    if QM_PRINTF_SUPPORT_FLOAT
+
+        config QM_PRINTF_EXPONENTIAL_SUPPORT
+        bool "exponential support"
+        default "n"
+
+        config QM_PRINTF_FLOAT_PRECISION
+        int "float precision"
+        default 6
+        
+    endif
+        config QM_PRINTF_LONG_LONG_SUPPORT
+        bool "long long support"
+        default "n"
+
+        config QM_PRINTF_PTRDIFF_T_SUPPORT
+        bool "ptrdiff_t support"
+        default "n"
+
+    endif
+        
+endmenu

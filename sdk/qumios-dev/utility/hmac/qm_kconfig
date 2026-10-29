@@ -1,0 +1,10 @@
+menu "hmac"
+
+    config QM_HMAC
+        bool "qm hmac support"
+        default "n"
+        select QM_MD5
+        select QM_SHA1
+        select QM_SHA256
+        
+endmenu

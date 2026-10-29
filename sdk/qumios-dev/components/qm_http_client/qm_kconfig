@@ -1,0 +1,110 @@
+menu "qm http client"
+
+    config QM_HTTP_CLIENT_SUPPORT
+        bool "qm http client support"
+        default "n"
+        depends on QM_OS_SUPPORT
+        select QM_BASE64
+        select QM_MD5
+        select QM_SHA256
+        select QM_STRING
+        help
+            Enable qumi HTTP client component.
+
+    if QM_HTTP_CLIENT_SUPPORT
+
+        config QM_HTTP_CLIENT_TIMEOUT_MS
+            int "HTTP client default timeout (ms)"
+            default 5000
+            help
+                Default timeout for each HTTP client transport read and write.
+                DNS, connect and TLS handshake bounds are owned by the HAL.
+
+        config QM_HTTP_CLIENT_HEADER_MAX
+            int "HTTP client maximum header size"
+            default 1024
+            help
+                Maximum HTTP response header size accepted by the client.
+
+        config QM_HTTP_CLIENT_BODY_MAX
+            int "HTTP client maximum body size"
+            default 4096
+            help
+                Maximum HTTP response body size accepted by the client.
+
+        config QM_HTTP_CLIENT_RX_BUF_SIZE
+            int "HTTP client receive buffer size"
+            default 512
+            help
+                Streaming receive buffer size used by the HTTP client.
+
+        config QM_HTTP_CLIENT_LINE_MAX
+            int "HTTP client line buffer size"
+            default 64
+            help
+                Maximum chunk line buffer size used by chunked response parsing.
+
+        config QM_HTTP_CLIENT_REDIRECT_MAX
+            int "HTTP client default redirect count"
+            default 5
+            help
+                Default maximum number of automatic redirects when
+                max_redirection_count is set to 0.
+
+        config QM_HTTP_CLIENT_REDIRECT_RESOLVE_RFC3986
+            bool "HTTP client RFC3986 redirect URL resolution"
+            default n
+            help
+                Resolve Location values with RFC3986-style relative reference
+                handling, including ./ and ../ path segment normalization,
+                query-only references and fragment-only references. Disable to
+                use the smaller legacy relative redirect joiner.
+
+        config QM_HTTP_CLIENT_AUTH_RETRY_MAX
+            int "HTTP client default Digest auth retry count"
+            default 2
+            help
+                Default maximum number of automatic Digest 401 retries.
+
+        config QM_HTTP_CLIENT_LOG_CONFIG
+            bool "Enable qm_http_client log category configuration"
+            default n
+            help
+                Enable category-level default log controls for qm_http_client.
+                When disabled, error and lifecycle logs remain enabled.
+
+        if QM_HTTP_CLIENT_LOG_CONFIG
+
+            config QM_HTTP_CLIENT_LOG_ERROR
+                bool "Enable qm_http_client error logs"
+                default y
+
+            config QM_HTTP_CLIENT_LOG_LIFECYCLE
+                bool "Enable qm_http_client lifecycle logs"
+                default y
+
+            config QM_HTTP_CLIENT_LOG_CONTROL
+                bool "Enable qm_http_client control logs"
+                default n
+
+            config QM_HTTP_CLIENT_LOG_UPLINK
+                bool "Enable qm_http_client uplink logs"
+                default n
+
+            config QM_HTTP_CLIENT_LOG_DOWNLINK
+                bool "Enable qm_http_client downlink logs"
+                default n
+
+            config QM_HTTP_CLIENT_LOG_PAYLOAD
+                bool "Enable qm_http_client payload logs"
+                default n
+
+            config QM_HTTP_CLIENT_LOG_STATS
+                bool "Enable qm_http_client statistics logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

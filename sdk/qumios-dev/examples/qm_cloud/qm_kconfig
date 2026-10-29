@@ -1,0 +1,108 @@
+menu "qm cloud example config"
+
+    config QM_CLOUD_DYNREG_EXAMPLE_CONFIG
+        bool "qm cloud productSecret dynreg example config"
+        default n
+
+    if QM_CLOUD_DYNREG_EXAMPLE_CONFIG
+
+        config QM_CLOUD_DYNREG_EXAMPLE_PRODUCT_ID
+            int "product id"
+            default 0
+
+        config QM_CLOUD_DYNREG_EXAMPLE_PRODUCT_SECRET
+            string "product secret"
+            default ""
+
+        config QM_CLOUD_DYNREG_EXAMPLE_SN
+            string "device sn"
+            default "qm-cloud-dynreg-device"
+
+        config QM_CLOUD_DYNREG_EXAMPLE_HOST
+            string "dynreg host override"
+            default ""
+
+        config QM_CLOUD_DYNREG_EXAMPLE_ADV_CID
+            string "BLE provisioning advertising CID"
+            default ""
+
+        config QM_CLOUD_DYNREG_EXAMPLE_VERSION
+            string "firmware version"
+            default "1.0.0"
+
+        config QM_CLOUD_DYNREG_EXAMPLE_WIFI_RETRY_MAX
+            int "WiFi reconnect retry max count"
+            default 10
+            range 0 100
+
+        choice QM_CLOUD_DYNREG_EXAMPLE_ENV_CHOICE
+            prompt "default dynreg environment"
+            default QM_CLOUD_DYNREG_EXAMPLE_ENV_PROD
+
+            config QM_CLOUD_DYNREG_EXAMPLE_ENV_DEV
+                bool "dev"
+
+            config QM_CLOUD_DYNREG_EXAMPLE_ENV_TEST
+                bool "test"
+
+            config QM_CLOUD_DYNREG_EXAMPLE_ENV_PROD
+                bool "prod"
+        endchoice
+
+        config QM_CLOUD_DYNREG_EXAMPLE_ENV
+            int
+            default 0 if QM_CLOUD_DYNREG_EXAMPLE_ENV_DEV
+            default 1 if QM_CLOUD_DYNREG_EXAMPLE_ENV_TEST
+            default 2
+
+    endif
+
+    config QM_CLOUD_AUTHCODE_EXAMPLE_CONFIG
+        bool "qm cloud authCode example config"
+        default n
+
+    if QM_CLOUD_AUTHCODE_EXAMPLE_CONFIG
+
+        config QM_CLOUD_AUTHCODE_EXAMPLE_PRODUCT_ID
+            int "product id"
+            default 0
+
+        config QM_CLOUD_AUTHCODE_EXAMPLE_AUTHCODE
+            string "authCode"
+            default ""
+
+        config QM_CLOUD_AUTHCODE_EXAMPLE_SN
+            string "device sn"
+            default "qm-cloud-authcode-device"
+
+        config QM_CLOUD_AUTHCODE_EXAMPLE_HOST
+            string "authCode host override"
+            default ""
+
+        config QM_CLOUD_AUTHCODE_EXAMPLE_VERSION
+            string "firmware version"
+            default "1.0.0"
+
+        choice QM_CLOUD_AUTHCODE_EXAMPLE_ENV_CHOICE
+            prompt "default dynreg environment"
+            default QM_CLOUD_AUTHCODE_EXAMPLE_ENV_PROD
+
+            config QM_CLOUD_AUTHCODE_EXAMPLE_ENV_DEV
+                bool "dev"
+
+            config QM_CLOUD_AUTHCODE_EXAMPLE_ENV_TEST
+                bool "test"
+
+            config QM_CLOUD_AUTHCODE_EXAMPLE_ENV_PROD
+                bool "prod"
+        endchoice
+
+        config QM_CLOUD_AUTHCODE_EXAMPLE_ENV
+            int
+            default 0 if QM_CLOUD_AUTHCODE_EXAMPLE_ENV_DEV
+            default 1 if QM_CLOUD_AUTHCODE_EXAMPLE_ENV_TEST
+            default 2
+
+    endif
+
+endmenu

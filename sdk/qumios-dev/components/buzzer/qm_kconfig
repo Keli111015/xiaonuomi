@@ -1,0 +1,15 @@
+menu "buzzer"
+
+    config BUZZER_PASSIVE_SUPPORT
+        bool "passive buzzer support"
+        default n
+
+    config BUZZER_ACTIVE_SUPPORT
+        bool "active buzzer support"
+        default y
+
+    config BUZZER_CHRIP_INTERVAL
+        int "buzzer chrip interval (unit: ms)"
+        default 500
+        range 100 1000
+endmenu

@@ -1,0 +1,15 @@
+menu "TOTP"
+
+    config TOTP_KEY_DIGITS
+        int "Password digits"
+        default 6
+        range 3 8
+
+    config TOTP_KEY_SETS
+        int "Number of passwords"
+        default 8
+        range 2 16
+
+
+        
+endmenu

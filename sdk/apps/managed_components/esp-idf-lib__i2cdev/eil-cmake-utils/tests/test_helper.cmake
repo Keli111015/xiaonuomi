@@ -1,0 +1,30 @@
+macro(require file)
+    include("${CMAKE_CURRENT_LIST_DIR}/../cmake/${file}.cmake")
+    set(FILE_UNDER_TEST ${file})
+endmacro()
+
+macro(describe subject)
+    message(STATUS "Describe: ${subject}")
+    set(SUBJECT ${subject})
+endmacro()
+
+macro(when message)
+    message(STATUS "when ${message}")
+    set(CONTEXT "when ${message}")
+endmacro()
+
+macro(it behavior)
+    set(CURRENT_BEHAVIOR ${behavior})
+endmacro()
+
+function(expect condition value)
+    cmake_language(CALL ${FILE_UNDER_TEST})
+
+    if(${condition} STREQUAL "TO_BE")
+        if("${${SUBJECT}}" STREQUAL "${value}")
+            message(STATUS "  PASSED: ${CONTEXT} ${SUBJECT} ${CURRENT_BEHAVIOR}")
+        else()
+            message(FATAL_ERROR "  FAILED: ${CONTEXT} ${SUBJECT} ${CURRENT_BEHAVIOR}\n    Expected ${SUBJECT} to be [${value}], but got [${${SUBJECT}}]")
+        endif()
+    endif()
+endfunction()

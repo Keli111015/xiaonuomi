@@ -1,0 +1,5 @@
+
+menu "drivers"
+source "${QDF_PATH}/drivers/ES8311/qm_kconfig"
+source "${QDF_PATH}/drivers/CAN_Trans/qm_kconfig"
+endmenu

@@ -1,0 +1,22 @@
+menu "multi_button"
+
+    config MULTI_BUTTON_SHORT_TIMEOUT
+        int "short press time"
+        range 100 500
+
+    config MULTI_BUTTON_LONG_TIMEOUT
+        int "long press time"
+        default 1000
+        range 500 10000
+        
+    config MULTI_BUTTON_TICKS_INTERVAL
+        int "ticks interval"
+        default 20
+        range 20 100
+
+    config MULTI_BUTTON_DEBOUNCE_TICKS
+        int "debounce ticks"
+        default 1
+        range 1 3
+
+endmenu

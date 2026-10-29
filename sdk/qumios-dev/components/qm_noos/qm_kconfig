@@ -1,0 +1,15 @@
+menu "qm noos"
+
+    if QM_NOOS_SUPPORT
+
+        config QM_NOOS_TASK_NUM
+            int "qm noos task num"
+            default 5
+
+        config QM_NOOS_QUEUE_NUM
+            int "qm noos queue num"
+            default 5
+
+    endif
+   
+endmenu

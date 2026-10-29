@@ -1,0 +1,10 @@
+{
+  "upstream": "https://gitee.com/xj-open/ljyd_xjwb03_agent_public_developer",
+  "base_commit": "89020f5e04bf777ae1672b8f3d320bc6e0ef3e0c",
+  "import_date": "2026-10-29",
+  "files": 29899,
+  "bytes": 874963429,
+  "overlay_files": 17,
+  "notes": "Upstream tracked files with reviewed current overlay. No .git, build outputs, local configuration, flash backups, captures or raw logs.",
+  "verification": "All imported paths and SHA256 hashes checked against a local import inventory before commit. Git preserves the published snapshot."
+}

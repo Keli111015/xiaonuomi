@@ -1,0 +1,4 @@
+#ifndef QM_HTTP_TEST_CONFIG_H
+#define QM_HTTP_TEST_CONFIG_H
+#define CONFIG_QM_LOG_SUPPORT 0
+#endif

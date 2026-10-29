@@ -1,0 +1,74 @@
+menu "GX8006 audio driver"
+
+config QM_GX8006_SUPPORT
+    bool
+    help
+        Internal protocol-driver build flag selected by the qm_audio GX8006
+        device backend.
+
+if QM_GX8006_SUPPORT
+
+config QM_GX8006_UART_PORT
+    int "UART port"
+    default 1
+
+config QM_GX8006_UART_BAUDRATE
+    int "UART baud rate"
+    range 9600 3000000
+    default 115200
+
+config QM_GX8006_UART_TX_PIN
+    int "UART TX GPIO"
+    default 40
+
+config QM_GX8006_UART_RX_PIN
+    int "UART RX GPIO"
+    default 39
+
+config QM_GX8006_FLOW_GPIO
+    int "Module flow-control GPIO"
+    default 38
+
+config QM_GX8006_UART_RECV_SIZE
+    int "UART receive buffer bytes"
+    range 64 4096
+    default 512
+
+config QM_GX8006_UART_TASK_STACK_SIZE
+    int "UART task stack size"
+    range 1024 16384
+    default 4096
+
+config QM_GX8006_UART_TASK_PRIORITY
+    int "UART task priority"
+    range 1 60
+    default 20
+
+config QM_GX8006_MIC_GAIN
+    int "Microphone gain"
+    range 0 100
+    default 30
+
+config QM_GX8006_SPK_GAIN
+    int "Initial speaker gain"
+    range 0 100
+    default 30
+
+config QM_GX8006_VAD_TIMEOUT
+    int "VAD timeout"
+    range 0 255
+    default 10
+
+config QM_GX8006_STOP_TIMEOUT_MS
+    int "Graceful playback stop timeout (ms)"
+    range 100 30000
+    default 5000
+    help
+        GX8006 STOP is end-of-input. Already buffered audio finishes before the
+        0x12/0x03 completion barrier releases the device for another playback.
+        This does not promise immediate interruption. A failed stop barrier
+        blocks reuse until the hardware route is reset.
+
+endif
+
+endmenu

@@ -1,0 +1,52 @@
+menu "qm battery gauge example config"
+
+    config QM_BATTERY_GAUGE_EXAMPLE_CONFIG
+        bool "qm battery gauge example config"
+        default n
+
+    if QM_BATTERY_GAUGE_EXAMPLE_CONFIG
+
+        config QM_BATTERY_GAUGE_EXAMPLE_DESIGN_CAPACITY_MAH
+            int "example design capacity in mAh"
+            default 5200
+            range 1 50000
+
+        config QM_BATTERY_GAUGE_EXAMPLE_USABLE_CAPACITY_MAH
+            int "example usable capacity in mAh"
+            default 5300
+            range 1 50000
+
+        config QM_BATTERY_GAUGE_EXAMPLE_R_INTERNAL_MOHM
+            int "example internal resistance in milliohms"
+            default 80
+            range 0 1000
+
+        config QM_BATTERY_GAUGE_EXAMPLE_SAVED_SOC_ENABLE
+            bool "restore a persisted SOC seed in the example"
+            default y
+
+        config QM_BATTERY_GAUGE_EXAMPLE_SAVED_SOC_PERCENT
+            int "example persisted SOC percent"
+            default 100
+            range 0 100
+
+        config QM_BATTERY_GAUGE_EXAMPLE_SLEEP_RESUME_ENABLE
+            bool "run sleep-resume demo flow"
+            default y
+
+        config QM_BATTERY_GAUGE_EXAMPLE_POWEROFF_RESUME_ENABLE
+            bool "run poweroff-resume demo flow"
+            default y
+
+        config QM_BATTERY_GAUGE_EXAMPLE_UNKNOWN_OFFLINE_TIME_ENABLE
+            bool "run unknown-offline-time restore demo flow"
+            default y
+
+        config QM_BATTERY_GAUGE_EXAMPLE_STEP_DELAY_MS
+            int "delay between simulated trace steps in milliseconds"
+            default 250
+            range 0 10000
+
+    endif
+
+endmenu

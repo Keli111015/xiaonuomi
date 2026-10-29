@@ -1,0 +1,31 @@
+menu "ntpdate"
+    
+    config NTPDATE_SUPPORT
+        bool "ntp update support"
+        select QM_EPOCHTIME_SUPPORT
+        select QM_TIME_SUPPORT
+        default n 
+
+    if NTPDATE_SUPPORT
+
+        config NTPDATE_TASK_PRIO
+            int "time sync task priority"
+            default 21
+
+        config NTPDATE_TASK_SIZE
+            int "time sync task size"
+            default 4096
+
+        config NTPDATE_PERIODIC_SYNC_SUPPORT
+            bool "ntpdate periodic sync support"
+            default y 
+
+        if NTPDATE_PERIODIC_SYNC_SUPPORT
+            config NTPDATE_PERIODIC_SYNC_INTERVAL
+                int "time sync interval Unit: seconds"
+                default 43200
+                range 600 86400
+        endif
+    endif
+
+endmenu

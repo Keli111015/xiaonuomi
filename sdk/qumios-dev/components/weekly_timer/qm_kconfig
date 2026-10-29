@@ -1,0 +1,39 @@
+menu "weekly timer"
+
+    config QM_WEEKLY_TIMER_SUPPORT
+        bool "weekly timer support"
+        select QM_TIME_SUPPORT
+        default n
+
+    if QM_WEEKLY_TIMER_SUPPORT
+
+        config WEEKLY_TIMER_LOG_CONFIG
+            bool "Enable weekly_timer log category configuration"
+            default n
+            help
+                Enable category-level logging for weekly_timer.
+                When disabled, only error and lifecycle logs are enabled.
+
+        if WEEKLY_TIMER_LOG_CONFIG
+
+            config WEEKLY_TIMER_LOG_ERROR
+                bool "weekly_timer error logs"
+                default y
+
+            config WEEKLY_TIMER_LOG_LIFECYCLE
+                bool "weekly_timer lifecycle logs"
+                default y
+
+            config WEEKLY_TIMER_LOG_CONTROL
+                bool "weekly_timer control logs"
+                default n
+
+            config WEEKLY_TIMER_LOG_STATS
+                bool "weekly_timer statistics logs"
+                default n
+
+        endif
+
+    endif
+        
+endmenu

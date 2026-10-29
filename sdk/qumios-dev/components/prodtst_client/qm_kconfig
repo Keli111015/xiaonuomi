@@ -1,0 +1,127 @@
+menu "prodtst client"
+
+    config PRODTST_CLIENT_SUPPORT
+        bool "open prodtst client"
+        default "n"    
+
+    if PRODTST_CLIENT_SUPPORT
+        config PRODTST_CLIENT_DEBUG_LOG_ON
+        bool "open prodtst client debug log"
+        default "n"  
+
+        config PRODTST_CLINET_BLE_MESH_ALLOC
+        bool "open prodtst client user alloc"
+        default "y"  
+        
+        config PRODTST_CLIENT_GEN_CMD_SUPPORT
+        bool "open prodtst client generic cmd"
+        default "y" 
+
+        choice
+            prompt "choice chip of prodtst"
+            default PRODTST_CLIENT_CHIP_WB28
+
+            config PRODTST_CLIENT_CHIP_WB90
+                bool "choice chip WB90"
+
+            config PRODTST_CLIENT_CHIP_WB60
+                bool "choice chip WB60"
+
+            config PRODTST_CLIENT_CHIP_WB28
+                bool "choice chip WB28"
+
+            config PRODTST_CLIENT_CHIP_WB20
+                bool "choice chip WB20"
+
+            config PRODTST_CLIENT_CHIP_W70
+                bool "choice chip W70"
+
+            config PRODTST_CLIENT_CHIP_B47
+                bool "choice chip B47"
+        endchoice
+        
+        config PRODTST_CLIENT_RECV_BUFF_LEN
+            int "config recv buff len"
+            default 256
+            range 32 2048 
+
+        config PRODTST_CLIENT_EXT_LINK_SUPPORT
+            bool "user prodtst_client_channel_link_register"
+            default "n"
+
+        if !PRODTST_CLIENT_EXT_LINK_SUPPORT
+
+            config PRODTST_CLIENT_WIFI_SUPPORT
+                bool "config prodtst client wifi"
+                default "n"
+
+            if PRODTST_CLIENT_WIFI_SUPPORT
+                
+            endif
+
+            config PRODTST_CLIENT_UART_SUPPORT
+                bool "config prodtst client uart"
+                default "n"
+
+            if PRODTST_CLIENT_UART_SUPPORT
+
+                config PRODTST_CLIENT_UART_PORT
+                    int "prodtst client uart port"
+                    default 1
+                    range 1 10
+
+                config PRODTST_CLIENT_UART_BAUDRATE
+                    int "prodtst client uart baud rate"
+                    default 9600      
+
+                config PRODTST_CLIENT_UART_TX_PIN
+                    int "prodtst client uart tx pin"
+                    default 3  
+
+                config PRODTST_CLIENT_UART_RX_PIN
+                    int "prodtst client uart rx pin"
+                    default 4  
+
+            endif
+
+            config PRODTST_CLIENT_BLE_GATT_SUPPORT
+                bool "config prodtst client ble gatt"
+                default "n"
+
+            if PRODTST_CLIENT_BLE_GATT_SUPPORT
+                config PRODTST_CLIENT_BLE_GATT_ADV_NAME
+                    string "prodtst client ble adv name"
+                    default "xjiang_prodtst"
+            endif
+            
+            config PRODTST_CLIENT_BLE_MESH_SUPPORT
+                bool "config prodtst client ble mesh"
+                default "n"
+
+            if PRODTST_CLIENT_BLE_MESH_SUPPORT
+
+                config PRODTST_CLIENT_BLE_MESH_WITH_WRAP_ENTER
+                    bool "prodtst client ble mesh with wrap enter"
+                    default "n"
+                    
+                config PRODTST_CLIENT_BLE_MESH_PID
+                    int "prodtst client ble mesh xjiang pid"
+                    default 1
+
+                config PRODTST_CLIENT_BLE_MESH_MIN_RSSI
+                    int "prodtst client ble mesh min rssi"
+                    default -60
+                    range -127 0
+
+                config PRODTST_CLIENT_BLE_MESH_ENTER_TIMEOUT_S
+                    int "prodtst client ble mesh enter prodtst timout (unit: s)"
+                    default 10
+
+                config PRODTST_CLIENT_BLE_MESH_RECV_TIMEOUT_S
+                    int "prodtst client ble mesh recv timout (unit: s)"
+                    default 0
+
+            endif
+        endif
+    endif
+endmenu

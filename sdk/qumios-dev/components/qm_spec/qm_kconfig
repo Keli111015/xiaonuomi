@@ -1,0 +1,42 @@
+menu "qm spec"
+
+    config QM_SPEC_LOG_CONFIG
+        bool "Enable qm_spec log category configuration"
+        default n
+        help
+            Enable category-level logging for qm_spec.
+            When disabled, only error and lifecycle logs are enabled.
+
+    if QM_SPEC_LOG_CONFIG
+
+        config QM_SPEC_LOG_ERROR
+            bool "qm_spec error logs"
+            default y
+
+        config QM_SPEC_LOG_LIFECYCLE
+            bool "qm_spec lifecycle logs"
+            default y
+
+        config QM_SPEC_LOG_CONTROL
+            bool "qm_spec control logs"
+            default n
+
+        config QM_SPEC_LOG_UPLINK
+            bool "qm_spec uplink logs"
+            default n
+
+        config QM_SPEC_LOG_DOWNLINK
+            bool "qm_spec downlink logs"
+            default n
+
+        config QM_SPEC_LOG_PAYLOAD
+            bool "qm_spec payload logs"
+            default n
+
+        config QM_SPEC_LOG_STATS
+            bool "qm_spec statistics logs"
+            default n
+
+    endif
+
+endmenu

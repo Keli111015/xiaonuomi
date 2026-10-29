@@ -1,0 +1,8 @@
+menu "soft iic"
+
+    config SOFT_IIC_SUPPORT
+        bool "soft iic support"
+        depends on QM_SOFT_IIC_SUPPORT
+        default "n"
+
+endmenu

@@ -1,0 +1,7 @@
+menu "harmony ble"
+
+    config HARMONY_BLE_SUPPORT
+        bool "harmony ble support"
+        default "n"
+        
+endmenu

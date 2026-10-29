@@ -1,0 +1,12 @@
+#.config
+#.config.old
+#include/config/qm_config.h
+.config
+qm_kconfig.dynamic
+*.wo
+*.o
+*.d
+*.su
+.vscode
+tools/kconfig/__pycache__/*
+

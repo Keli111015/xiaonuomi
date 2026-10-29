@@ -1,0 +1,31 @@
+dependencies:
+  esp-idf-lib/esp_idf_lib_helpers:
+    version: '*'
+description: ESP-IDF I2C master thread-safe utilities
+discussion: https://github.com/esp-idf-lib/core/discussions
+documentation: https://esp-idf-lib.github.io/i2cdev/
+files:
+  exclude:
+  - docs/**/*
+issues: https://github.com/esp-idf-lib/i2cdev/issues
+license: MIT
+maintainers:
+- Ruslan V. Uss (@UncleRus) <unclerus@gmail.com>
+- Piotr P. (@quinkq)
+repository: git://github.com/esp-idf-lib/i2cdev.git
+repository_info:
+  commit_sha: 7113b661fa467ad266e0b97b4e649ffa23d18cc5
+  path: .
+targets:
+- esp32
+- esp32c2
+- esp32c3
+- esp32c5
+- esp32c6
+- esp32c61
+- esp32h2
+- esp32p4
+- esp32s2
+- esp32s3
+url: https://github.com/esp-idf-lib/core
+version: 2.1.2

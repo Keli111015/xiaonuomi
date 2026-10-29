@@ -1,5 +1,7 @@
 # 当前交接（2026-10-29）
 
+官方完整SDK已整合到`sdk/`，当前开发主入口是`sdk/apps/main/`；不再需要单独克隆官方库或应用overlay。构建见[FULL_REPOSITORY.md](FULL_REPOSITORY.md)，overlay仅保留为历史快照。
+
 当前overlay对应官方SDK `89020f5e04bf777ae1672b8f3d320bc6e0ef3e0c`，包含17个文件：构建配置、Agent唤醒、main、Pomodoro、功能开关、摄像头、舵机、姿态代码、新增morphcube组件、去密钥云配置及本地配置模板。
 
 ## 当前行为

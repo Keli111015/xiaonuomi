@@ -1,0 +1,66 @@
+#ifndef _OFFLINE_VOICE_COMMON_H_
+#define _OFFLINE_VOICE_COMMON_H_
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "qm_types.h"
+#include "qm_config.h"
+
+#ifndef CONFIG_LOG_ON
+#define CONFIG_LOG_ON 1
+#endif
+
+#ifndef CONFIG_OFFLINE_VOICE_UART_SUPPORT
+#define CONFIG_OFFLINE_VOICE_UART_SUPPORT           0
+#endif
+
+#ifndef CONFIG_OFFLINE_VOICE_TYPE_GEN_SERIAL 
+#define CONFIG_OFFLINE_VOICE_TYPE_GEN_SERIAL        0
+#endif
+
+#ifndef CONFIG_OFFLINE_VOICE_TYPE_OPENCPU 
+#define CONFIG_OFFLINE_VOICE_TYPE_OPENCPU           0
+#endif
+
+#ifndef CONFIG_OFFLINE_VOICE_RTOS_SUPPORT
+#define CONFIG_OFFLINE_VOICE_RTOS_SUPPORT           1
+#endif
+
+#ifndef CONFIG_OFFLINE_VOICE_BUFF_NUM
+#define CONFIG_OFFLINE_VOICE_BUFF_NUM               128
+#endif
+
+#ifndef CONFIG_OFFLINE_VOICE_RECV_WAIT_TIMEOUT_MS
+#define CONFIG_OFFLINE_VOICE_RECV_WAIT_TIMEOUT_MS   200
+#endif
+
+#ifndef CONFIG_OFFLINE_VOICE_SEND_WAIT_TIMEOUT_MS
+#define CONFIG_OFFLINE_VOICE_SEND_WAIT_TIMEOUT_MS   500
+#endif
+
+#if CONFIG_OFFLINE_VOICE_UART_SUPPORT
+    #ifndef CONFIG_OFFLINE_VOICE_UART_PORT
+    #define CONFIG_OFFLINE_VOICE_UART_PORT    1
+    #endif
+
+    #ifndef CONFIG_OFFLINE_VOICE_UART_BAUDRATE
+    #define CONFIG_OFFLINE_VOICE_UART_BAUDRATE  9600
+    #endif
+
+    #ifndef CONFIG_OFFLINE_VOICE_UART_TX_PIN
+    #define CONFIG_OFFLINE_VOICE_UART_TX_PIN    3
+    #endif
+
+    #ifndef CONFIG_OFFLINE_VOICE_UART_RX_PIN
+    #define CONFIG_OFFLINE_VOICE_UART_RX_PIN    2
+    #endif
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+
+#endif /* PRODTST_CLIENT_H */

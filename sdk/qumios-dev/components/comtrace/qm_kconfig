@@ -1,0 +1,58 @@
+menu "ComTrace Edge Protocol"
+
+config QM_COMTRACE_SUPPORT
+    bool "ComTrace edge protocol support"
+    default n
+    depends on QM_OS_SUPPORT
+    select QM_STRING
+    select QM_TINYCBOR_SUPPORT
+
+if QM_COMTRACE_SUPPORT
+config QM_COMTRACE_LOG_SUPPORT
+    bool "CELP/1 edge log capability"
+    default y
+
+config QM_COMTRACE_OTA_SUPPORT
+    bool "CEUP/1 OTA capability"
+    default n
+    select QM_SHA256
+    help
+        Enable CEUP/1 firmware transfer through qm_ota_start/write/read/end/abort.
+        The application must provide an authorization callback that validates each
+        update against an authenticated transport or trusted release metadata.
+
+if QM_COMTRACE_OTA_SUPPORT
+config QM_COMTRACE_OTA_STREAM_VERIFY
+    bool "Verify OTA while receiving chunks"
+    default n
+    help
+        Hash each chunk after qm_ota_write() and compare the completed stream at
+        update_end. Enable only on targets whose OTA HAL cannot read the staged
+        image back. The default verifies by calling qm_ota_read().
+
+config QM_COMTRACE_OTA_ABORT_SUPPORT
+    int "OTA HAL abort support (0/1)"
+    default 1
+    range 0 1
+    help
+        Call qm_ota_abort() on cancel, disconnect, and transfer failure. Disable
+        only when the target HAL cannot abort; a failed transfer then remains
+        terminal until the application reboots.
+endif
+
+config QM_COMTRACE_DISCOVERY_SUPPORT
+    bool "ComTrace DNS-SD discovery"
+    default y
+    select MDNS_SUPPORT
+
+config QM_COMTRACE_MAX_FRAME
+    int "ComTrace maximum CBOR payload"
+    default 1200
+    range 1 1200
+
+config QM_COMTRACE_QUEUE_DEPTH
+    int "CELP local send queue depth"
+    default 256
+    range 1 256
+endif
+endmenu

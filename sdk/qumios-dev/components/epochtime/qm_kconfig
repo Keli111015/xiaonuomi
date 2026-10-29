@@ -1,0 +1,87 @@
+menu "epochtime"
+
+    config QM_EPOCHTIME_SUPPORT
+        bool "epochtime support"
+        default n
+
+    if QM_EPOCHTIME_SUPPORT
+
+        config QM_EPOCHTIME_LOG_CONFIG
+            bool "Enable qm_epochtime log category configuration"
+            default n
+            help
+                Enable category-level logging for qm_epochtime.
+                When disabled, only error and lifecycle logs are enabled.
+
+        if QM_EPOCHTIME_LOG_CONFIG
+
+            config QM_EPOCHTIME_LOG_ERROR
+                bool "qm_epochtime error logs"
+                default y
+
+            config QM_EPOCHTIME_LOG_LIFECYCLE
+                bool "qm_epochtime lifecycle logs"
+                default y
+
+            config QM_EPOCHTIME_LOG_CONTROL
+                bool "qm_epochtime control logs"
+                default n
+
+            config QM_EPOCHTIME_LOG_PAYLOAD
+                bool "qm_epochtime payload logs"
+                default n
+
+            config QM_EPOCHTIME_LOG_STATS
+                bool "qm_epochtime statistics logs"
+                default n
+
+        endif
+
+    choice
+        prompt "choice method of getting time"
+        default QM_TIME_NTP_SUPPORT
+
+        config QM_TIME_NTP_SUPPORT
+            bool "get time from ntp"
+
+        config QM_TIME_LOCAL_SUPPORT
+            bool "get time from local"
+    endchoice
+
+    if QM_TIME_NTP_SUPPORT
+
+        config QM_ALI_NTP_SUPPORT
+            bool "ali ntp"
+            default y
+        
+        if QM_ALI_NTP_SUPPORT
+
+            config QM_NTP_PORT
+                int "ali ntp port"
+                default 123
+                range 1 65535
+        endif
+
+        config QM_TENCENT_NTP_SUPPORT
+            bool "tencent ntp"
+            default n
+
+        if QM_TENCENT_NTP_SUPPORT
+
+            config QM_TENCENT_NTP_PORT
+                int "tecent ntp port"
+                default 123
+                range 1 65535
+        endif
+
+    endif
+
+
+    if QM_TIME_LOCAL_SUPPORT
+
+
+    endif
+
+    endif
+
+endmenu

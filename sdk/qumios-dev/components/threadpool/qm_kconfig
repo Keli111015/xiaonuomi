@@ -1,0 +1,10 @@
+menu "threadpool"
+
+    config THREADPOOL_TASK_SIZE
+        int "thread task size"
+        default 4096
+
+    config THREADPOOL_TASK_PRIO
+        int "threadpool task prio"
+        default 20
+endmenu

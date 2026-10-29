@@ -1,0 +1,18 @@
+menu "virtual channel"
+
+    config VC_SERVER_NUM
+        int "virtual channel server num"
+        default 4
+        range 1 16
+
+    config VC_LISTEN_NUM
+        int "virtual channel listen num"
+        default 8
+        range 1 16
+
+    config VC_CLIENT_NUM
+        int "virtual channel client num"
+        default 8
+        range 1 16
+
+endmenu

@@ -1,0 +1,18 @@
+menu "MQTT"
+
+    config MQTT_TLS_SUPPORT
+        bool "mqtt tls support"
+        select QM_NETWORK_TLS_SUPPORT
+        default "n"
+
+    config MQTT_DEBUG
+        bool "mqtt debug print"
+        default "y"
+        select QM_LOG
+
+    config IOT_MQTT_WRITE_TIMEOUT
+        int "mqtt write timeout, unit:ms"
+        default 100
+        range 100 1000
+
+endmenu

@@ -1,0 +1,296 @@
+#include "qm.h"
+#include "qm_iot_streams.h"
+#include "qm_iot_streams_cbor.h"
+
+#include "cbor.h"
+
+/**
+ * @brief Number of keys in cbor get stream request message.
+ */
+#define CBOR_GETSTREAMREQUEST_ITEM_COUNT    6
+
+/**
+ * @brief Helper function to verify the data type of the value in map.
+ *
+ * @param[in] expectedType Data type expected.
+ * @param[in] Value Value to check.
+ * @return CborError
+ */
+static CborError checkDataType( CborType expectedType,
+                                const CborValue * Value )
+{
+    CborError cborResult = CborNoError;
+    CborType actualType = cbor_value_get_type( Value );
+
+    if( actualType != expectedType )
+    {
+        cborResult = CborErrorIllegalType;
+    }
+
+    return cborResult;
+}
+
+
+/**
+ * @brief Decode a Get Stream response message from AWS IoT OTA.
+ */
+bool qm_iot_streams_cbor_decode_msg( const uint8_t * messageBuffer,
+                                    int messageSize,
+                                    int * fileId,
+                                    int * blockId,
+                                    int * blockSize,
+                                    uint8_t * const * payload,
+                                    int * payloadSize )
+{
+    CborParser parser;
+    CborValue value, cborMap;
+    size_t payloadSizeReceived = 0;
+    CborError cborResult = CborNoError;
+
+    if( ( fileId == NULL ) || ( blockId == NULL ) || ( blockSize == NULL ) ||
+        ( payload == NULL ) || ( payloadSize == NULL ) ||
+        ( messageBuffer == NULL ) )
+    {
+        cborResult = CborUnknownError;
+    }
+
+    /* Initialize the parser. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_parser_init( messageBuffer, messageSize, 0, &parser, &cborMap );
+    }
+
+    /* Get the outer element and confirm that it's a "map," i.e., a set of
+     * CBOR key/value pairs. */
+    if( CborNoError == cborResult )
+    {
+        if( false == cbor_value_is_map( &cborMap ) )
+        {
+            cborResult = CborErrorIllegalType;
+        }
+    }
+
+    /* Find the file ID. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_value_map_find_value( &cborMap,
+                                                QM_IOT_STREAMS_FILEID_KEY,
+                                                &value );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = checkDataType( CborIntegerType, &value );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_value_get_int( &value, ( int * ) fileId );
+    }
+
+    /* Find the block ID. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_value_map_find_value( &cborMap,
+                                                QM_IOT_STREAMS_BLOCKID_KEY,
+                                                &value );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = checkDataType( CborIntegerType, &value );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_value_get_int( &value, ( int * ) blockId );
+    }
+
+    /* Find the block size. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_value_map_find_value( &cborMap,
+                                                QM_IOT_STREAMS_BLOCKSIZE_KEY,
+                                                &value );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = checkDataType( CborIntegerType, &value );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_value_get_int( &value, ( int * ) blockSize );
+    }
+
+    /* Find the payload bytes. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_value_map_find_value( &cborMap,
+                                                QM_IOT_STREAMS_BLOCKPAYLOAD_KEY,
+                                                &value );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = checkDataType( CborByteStringType, &value );
+    }
+
+    /* Calculate the size we need to malloc for the payload. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_value_calculate_string_length( &value,
+                                                         &payloadSizeReceived );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        /* Check if the received payload size is less than or equal to buffer
+         * size. */
+        if( payloadSizeReceived <= ( *payloadSize ) )
+        {
+            *payloadSize = payloadSizeReceived;
+        }
+        else
+        {
+            cborResult = CborErrorOutOfMemory;
+        }
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_value_copy_byte_string( &value,
+                                                  *payload,
+                                                  (size_t *)payloadSize,
+                                                  NULL );
+    }
+
+    return CborNoError == cborResult;
+}
+
+/**
+ * @brief Create an encoded Get Stream Request message for the AWS IoT OTA
+ * service. The service allows block count or block bitmap to be requested,
+ * but not both.
+ */
+bool qm_iot_streams_cbor_encode_msg( uint8_t * messageBuffer,
+                                    int messageBufferSize,
+                                    int * encodedMessageSize,
+                                    const char * clientToken,
+                                    uint32_t fileId,
+                                    uint32_t blockSize,
+                                    uint32_t blockOffset,
+                                    const uint8_t * blockBitmap,
+                                    int blockBitmapSize,
+                                    uint32_t numOfBlocksRequested )
+{
+    CborError cborResult = CborNoError;
+    CborEncoder encoder, cborMapEncoder;
+
+    if( ( messageBuffer == NULL ) || ( encodedMessageSize == NULL ) ||
+        ( clientToken == NULL ) || ( blockBitmap == NULL ) )
+    {
+        cborResult = CborUnknownError;
+    }
+
+    /* Initialize the CBOR encoder. */
+    if( CborNoError == cborResult )
+    {
+        cbor_encoder_init( &encoder, messageBuffer, messageBufferSize, 0 );
+        cborResult = cbor_encoder_create_map( &encoder,
+                                              &cborMapEncoder,
+                                              CBOR_GETSTREAMREQUEST_ITEM_COUNT );
+    }
+
+    /* Encode the client token key and value. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_text_stringz( &cborMapEncoder,
+                                               QM_IOT_STREAMS_CLIENTTOKEN_KEY );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_text_stringz( &cborMapEncoder, clientToken );
+    }
+
+    /* Encode the file ID key and value. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_text_stringz( &cborMapEncoder,
+                                               QM_IOT_STREAMS_FILEID_KEY );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_int( &cborMapEncoder, ( int64_t ) fileId );
+    }
+
+    /* Encode the block size key and value. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_text_stringz( &cborMapEncoder,
+                                               QM_IOT_STREAMS_BLOCKSIZE_KEY );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_int( &cborMapEncoder, ( int64_t ) blockSize );
+    }
+
+    /* Encode the block offset key and value. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_text_stringz( &cborMapEncoder,
+                                               QM_IOT_STREAMS_BLOCKOFFSET_KEY );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_int( &cborMapEncoder, ( int64_t ) blockOffset );
+    }
+
+    /* Encode the block bitmap key and value. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_text_stringz( &cborMapEncoder,
+                                               QM_IOT_STREAMS_BLOCKBITMAP_KEY );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_byte_string( &cborMapEncoder,
+                                              blockBitmap,
+                                              blockBitmapSize );
+    }
+
+    /* Encode the number of blocks requested key and value. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_text_stringz( &cborMapEncoder,
+                                               QM_IOT_STREAMS_NUMBEROFBLOCKS_KEY );
+    }
+
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encode_int( &cborMapEncoder, ( int64_t ) numOfBlocksRequested );
+    }
+
+    /* Close the encoder. */
+    if( CborNoError == cborResult )
+    {
+        cborResult = cbor_encoder_close_container_checked( &encoder,
+                                                           &cborMapEncoder );
+    }
+
+    /* Get the encoded size. */
+    if( CborNoError == cborResult )
+    {
+        *encodedMessageSize = cbor_encoder_get_buffer_size( &encoder,
+                                                            messageBuffer );
+    }
+
+    return CborNoError == cborResult;
+}
+

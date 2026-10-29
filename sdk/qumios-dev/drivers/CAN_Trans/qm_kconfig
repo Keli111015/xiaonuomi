@@ -1,0 +1,49 @@
+menu "Can Trans"
+
+    config CAN_TRANS_SUPPORT
+        bool "can trans support"
+        depends on QM_CAN_SUPPORT
+        default "n"
+
+    if CAN_TRANS_SUPPORT
+        config CAN_TRANS_TASK_SIZE
+        int "set can trans task size (unit:k)"
+        default 2048
+        range 1024  8144
+
+        config CAN_TRANS_TASK_PRIO	
+        int "set can trans task prio"
+        default 20
+        range 0  20
+
+        config CAN_TRANS_IO_READ_TOGGLE	
+        bool "can trans addr io read level toggle"
+        default "n"
+    
+        choice 
+            prompt "select can trans device"
+            config CAN_DEVICE_TYPE_BOX	
+            bool "device type box"
+
+            config CAN_DEVICE_TYPE_UART
+            bool "device type uart hub"
+
+            config CAN_DEVICE_TYPE_MULTIMETER	
+            bool "device type multimeter"
+
+            config CAN_DEVICE_TYPE_LED
+            bool "device type led"
+
+            config CAN_DEVICE_TYPE_VOICE	
+            bool "device type voice"
+
+            config CAN_DEVICE_TYPE_RELAY
+            bool "device type relay"
+
+            config CAN_DEVICE_TYPE_IO
+            bool "device type io"
+        endchoice
+        
+    endif
+
+endmenu

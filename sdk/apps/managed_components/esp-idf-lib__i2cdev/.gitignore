@@ -1,0 +1,12 @@
+examples/**/sdkconfig
+examples/**/sdkconfig.old
+examples/**/build/
+examples/**/dependencies.lock
+examples/**/managed_components/
+docs/_*/
+docs/**/*.log
+*.swp
+*.bak
+*.orig
+build/
+.vscode/

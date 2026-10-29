@@ -1,0 +1,71 @@
+menu "IOT generic"
+
+    config QM_IOT_GENERIC_SUPPORT
+        bool "IOT generic"
+        default n
+
+    if QM_IOT_GENERIC_SUPPORT
+
+        choice
+            prompt "choice platform"
+            default IOT_GENERIC_PLATFORM_ALI_SUPPORT
+
+            config IOT_GENERIC_PLATFORM_ALI_SUPPORT
+                bool "ali living platform support"
+
+            config IOT_GENERIC_PLATFORM_ALI_IOT_SUPPORT
+                bool "ali iot platform support"
+
+            config IOT_GENERIC_PLATFORM_MI_SUPPORT
+                bool "miot platform support"
+
+            config IOT_GENERIC_PLATFORM_HARMONY_SUPPORT
+                bool "harmony platform support"
+
+            config IOT_GENERIC_PLATFORM_XJIANG_SUPPORT
+                bool "xjiang platform support"
+
+            config IOT_GENERIC_PLATFORM_HONOR_SUPPORT
+                bool "honor platform support"
+
+            config IOT_GENERIC_PLATFORM_BAIDU_SUPPORT
+                bool "baidu platform support"
+
+            config IOT_GENERIC_PLATFORM_QM_CLOUD_SUPPORT
+                bool "qm cloud platform support"
+        endchoice
+
+        choice
+            prompt "choice network"
+            default IOT_GENERIC_NETWORK_WIFI_SUPPORT
+
+            config IOT_GENERIC_NETWORK_WIFI_SUPPORT
+                bool "wifi network support"
+
+            config IOT_GENERIC_NETWORK_BLE_SUPPORT
+                bool "ble network support"
+
+            config IOT_GENERIC_NETWORK_MESH_SUPPORT
+                bool "mesh network support"
+
+        endchoice
+
+        config IOT_MAP_VERSION_V2
+            bool "iot map version v2 on"
+            default "y"
+
+        config IOT_GENERIC_EVENT_SUPPORT
+            bool "event report support"
+            default "y"
+
+        config IOT_GENERIC_ACTION_SUPPORT
+            bool "action support"
+            default "y"
+
+        config IOT_GENERIC_RAWDATA_SUPPORT
+            bool "raw data support"
+            default "n"
+
+    endif
+        
+endmenu

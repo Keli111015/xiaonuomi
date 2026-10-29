@@ -1,0 +1,224 @@
+menu "soc"
+
+  config QM_GPIO_SUPPORT
+    bool "gpio support"
+    default "n"
+
+  config QM_RTC_SUPPORT
+    bool "rtc support"
+    default "n"
+
+
+  choice
+      prompt "select crystal oscillator channel"
+      depends on QM_RTC_SUPPORT
+      default QM_RTC_LSE_SUPPORT
+  
+      config QM_RTC_LSE_SUPPORT
+          bool "External crystal oscillator"
+      config QM_RTC_LSI_SUPPORT
+          bool "Internal crystal oscillator"
+  endchoice
+
+  config QM_CAN_SUPPORT
+    bool "can support"
+    default "n"
+
+  config QM_IR_SUPPORT
+    bool "ir support"
+    default "n"
+
+  config QM_PWM_SUPPORT
+    bool "pwm support"
+    default "n"
+
+  config QM_UART_SUPPORT
+    bool "uart support"
+    default "n"
+
+  config QM_I2C_SUPPORT
+    bool "i2c support"
+    default "n"
+  
+  config QM_SPI_SUPPORT
+    bool "spi support"
+    default "n"
+
+  config QM_TIMER_SUPPORT
+    bool "timer support"
+    default "n"
+
+  config QM_ADC_SUPPORT
+    bool "adc support"
+    default "n"
+
+  config QM_WDG_SUPPORT
+    bool "wdg support"
+    default "n"
+
+  config QM_FLASH_SUPPORT
+    bool "flash support"
+    default "n"
+    if QM_FLASH_SUPPORT
+        menu "flash config"
+
+            config QM_FLASH_BLOCK_SIZE
+                int "flash block size"
+                default 4096
+
+            config QM_FLASH_WRITE_GRAN
+                int "flash write granularity"
+                default 4
+
+            config QM_FLASH_PARTITION_BOOTLOADER_SUPPORT
+            bool "flash Bootloader partition support"
+            default "n"
+            if QM_FLASH_PARTITION_BOOTLOADER_SUPPORT
+                config QM_FLASH_BOOTLOADER_START_ADDR
+                hex "flash Bootloader partition start addr (0x...)"
+                default 0
+                config QM_FLASH_BOOTLOADER_size
+                hex "flash Bootloader partition size (0x...)"
+                default 1000
+            endif
+
+            config QM_FLASH_PARTITION_APPLICATION_SUPPORT
+            bool "flash App partition support"
+            default "n"
+            if QM_FLASH_PARTITION_APPLICATION_SUPPORT
+                config QM_FLASH_APPLICATION_START_ADDR
+                hex "flash App partition start addr (0x...)"
+                default 0
+                config QM_FLASH_APPLICATION_SIZE
+                hex "flash App partition size (0x...)"
+                default 1000
+            endif
+
+            config QM_FLASH_PARTITION_OTA_TEMP_SUPPORT
+            bool "flash OTA TEMP partition support (OTA upgrade)"
+            default "n"
+            if QM_FLASH_PARTITION_OTA_TEMP_SUPPORT
+                config QM_FLASH_OTA_TEMP_START_ADDR
+                hex "flash OTA TEMP partition start addr (0x...)"
+                default 0
+                config QM_FLASH_OTA_TEMP_SIZE
+                hex "flash OTA TEMP partition size (0x...)"
+                default 1000
+            endif
+
+            config QM_FLASH_PARTITION_PARAMETER_1_SUPPORT
+            bool "flash parameter1 partition support (OTA upgrade)"
+            default "n"
+            if QM_FLASH_PARTITION_PARAMETER_1_SUPPORT
+                config QM_FLASH_PARAMETER_1_START_ADDR
+                hex "flash parameter1 partition start addr (0x...)"
+                default 0
+                config QM_FLASH_PARAMETER_1_SIZE
+                hex "flash parameter1 partition size (0x...)"
+                default 1000
+            endif
+
+          config QM_FLASH_PARTITION_PARAMETER_2_SUPPORT
+            bool "flash parameter2 partition support (flashdb)"
+            default "n"
+            if QM_FLASH_PARTITION_PARAMETER_2_SUPPORT
+                config QM_FLASH_PARAMETER_2_START_ADDR
+                hex "flash parameter2 partition start addr (0x...)"
+                default 0
+                config QM_FLASH_PARAMETER_2_SIZE
+                hex "flash parameter2 partition size (0x...)"
+                default 1000
+            endif
+
+          config QM_FLASH_PARTITION_PARAMETER_3_SUPPORT
+            bool "flash parameter3 partition support (kv storage)"
+            default "n"
+            if QM_FLASH_PARTITION_PARAMETER_3_SUPPORT
+                config QM_FLASH_PARAMETER_3_START_ADDR
+                hex "flash parameter3 partition start addr (0x...)"
+                default 0
+                config QM_FLASH_PARAMETER_3_SIZE
+                hex "flash parameter3 partition size (0x...)"
+                default 1000
+            endif
+
+          config QM_FLASH_PARTITION_PARAMETER_4_SUPPORT
+            bool "flash parameter4 partition support (Used by security)"
+            default "n"
+            if QM_FLASH_PARTITION_PARAMETER_4_SUPPORT
+                config QM_FLASH_PARAMETER_4_START_ADDR
+                hex "flash parameter4 partition start addr (0x...)"
+                default 0
+                config QM_FLASH_PARAMETER_4_SIZE
+                hex "flash parameter4 partition size (0x...)"
+                default 1000
+            endif
+
+          config QM_FLASH_PARTITION_SPIFFS_SUPPORT
+            bool "flash spiffs partition support (spiffs file system)"
+            default "n"
+            if QM_FLASH_PARTITION_SPIFFS_SUPPORT
+                config QM_FLASH_SPIFFS_START_ADDR
+                hex "flash spiffs partition start addr (0x...)"
+                default 0
+                config QM_FLASH_SPIFFS_SIZE
+                hex "flash parameter5 partition size (0x...)"
+                default 1000
+            endif
+
+          config QM_FLASH_PARTITION_CUSTOM_1_SUPPORT
+            bool "flash custom1 partition support (For User defined)"
+            default "n"
+            if QM_FLASH_PARTITION_CUSTOM_1_SUPPORT
+                config QM_FLASH_CUSTOM_1_START_ADDR
+                hex "flash custom1 partition start addr (0x...)"
+                default 0
+                config QM_FLASH_CUSTOM_1_SIZE
+                hex "flash custom1 partition size (0x...)"
+                default 1000
+            endif
+
+          config QM_FLASH_PARTITION_CUSTOM_2_SUPPORT
+            bool "flash custom2 partition support (For User defined)"
+            default "n"
+            if QM_FLASH_PARTITION_CUSTOM_2_SUPPORT
+                config QM_FLASH_CUSTOM_2_START_ADDR
+                hex "flash custom2 partition start addr (0x...)"
+                default 0
+                config QM_FLASH_CUSTOM_2_SIZE
+                hex "flash custom2 partition size (0x...)"
+                default 1000
+            endif
+
+          config QM_FLASH_PARTITION_2ND_BOOT_SUPPORT
+            bool "flash 2nd boot partition support"
+            default "n"
+            if QM_FLASH_PARTITION_2ND_BOOT_SUPPORT
+                config QM_FLASH_2ND_BOOT_START_ADDR
+                hex "flash 2nd boot partition start addr (0x...)"
+                default 0
+                config QM_FLASH_2ND_BOOT_SIZE
+                hex "flash 2nd boot partition size (0x...)"
+                default 1000
+            endif
+
+          config QM_FLASH_PARTITION_OTA_SUB_SUPPORT
+            bool "flash ota sub partition support"
+            default "n"
+            if QM_FLASH_PARTITION_OTA_SUB_SUPPORT
+                config QM_FLASH_OTA_SUB_START_ADDR
+                hex "flash ota sub partition start addr (0x...)"
+                default 0
+                config QM_FLASH_OTA_SUB_SIZE
+                hex "flash ota sub partition size (0x...)"
+                default 1000
+            endif
+        endmenu
+    endif
+
+
+    config QM_USB_SUPPORT
+      bool "usb support"
+      default "n"
+    
+endmenu

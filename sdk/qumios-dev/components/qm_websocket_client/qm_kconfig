@@ -1,0 +1,122 @@
+menu "websocket client"
+
+    config QM_WEBSOCKET_CLIENT_SUPPORT
+        bool "qm websocket client support"
+        default "n"
+        depends on QM_OS_SUPPORT
+        depends on QM_OS_SEM_SUPPORT
+        select QM_BACKOFF_SUPPORT
+        help
+            Enable qumi WebSocket client component.
+
+    if QM_WEBSOCKET_CLIENT_SUPPORT
+
+        config QM_WEBSOCKET_CLIENT_TASK_STACK_SIZE
+            int "WebSocket client task stack size"
+            default 4096
+            help
+                Task stack size for WebSocket client task.
+
+        config QM_WEBSOCKET_CLIENT_TASK_PRIORITY
+            int "WebSocket client task priority"
+            default 20
+            help
+                Task priority for WebSocket client task.
+
+        config QM_WEBSOCKET_CLIENT_BUFFER_SIZE
+            int "WebSocket client receive buffer size"
+            default 1024
+            help
+                Receive buffer size used to dispatch large WebSocket payloads in chunks.
+
+        config QM_WEBSOCKET_CLIENT_KEEPALIVE_INTERVAL
+            int "WebSocket client keepalive interval (ms)"
+            default 30000
+            help
+                Keepalive interval for WebSocket client in milliseconds.
+
+        config QM_WEBSOCKET_CLIENT_NETWORK_TIMEOUT
+            int "WebSocket client network timeout (ms)"
+            default 10000
+            help
+                Timeout for WebSocket network read and write operations in milliseconds.
+
+        config QM_WEBSOCKET_CLIENT_RECONNECT_INTERVAL
+            int "WebSocket client reconnect interval (ms)"
+            default 1000
+            help
+                Base reconnect interval for WebSocket client backoff in milliseconds.
+
+        config QM_WEBSOCKET_CLIENT_MAX_RECONNECT_COUNT
+            int "WebSocket client maximum reconnect count"
+            default -1
+            help
+                Maximum reconnect count for WebSocket client. Set to -1 for infinite reconnect.
+
+        config QM_WEBSOCKET_CLIENT_MAX_RECONNECT_TIMEOUT
+            int "WebSocket client maximum reconnect timeout (ms)"
+            default 60000
+            help
+                Maximum reconnect backoff timeout in milliseconds.
+
+        config QM_WEBSOCKET_CLIENT_SEND_QUEUE_SIZE
+            int "WebSocket client default send queue size"
+            default 10
+            help
+                Default send queue capacity. This value is used when send_queue_size is 0.
+
+        config QM_WEBSOCKET_CLIENT_STOP_WAIT_MS
+            int "WebSocket client stop wait lower bound (ms)"
+            default 2000
+            help
+                Minimum time to wait for the WebSocket client task to stop.
+
+        config QM_WEBSOCKET_CLIENT_PING_TIMEOUT
+            int "WebSocket client ping timeout (ms)"
+            range 1 2147483647
+            default 30000
+            help
+                PONG wait timeout after a PING is sent, in milliseconds.
+
+        config QM_WEBSOCKET_CLIENT_PING_MAX_RETRY
+            int "WebSocket client ping maximum retry count"
+            range 1 3
+            default 2
+            help
+                Maximum consecutive PONG timeouts before the connection is considered abnormal.
+
+        config QM_WEBSOCKET_CLIENT_LOG_CONFIG
+            bool "Enable WebSocket client log category configuration"
+            default n
+            help
+                Enable category-level default log controls for WebSocket Client.
+                When disabled, the component keeps only error and lifecycle logs
+                enabled by default.
+
+        if QM_WEBSOCKET_CLIENT_LOG_CONFIG
+
+            config QM_WEBSOCKET_CLIENT_LOG_ERROR
+                bool "Enable WebSocket client error logs"
+                default y
+
+            config QM_WEBSOCKET_CLIENT_LOG_LIFECYCLE
+                bool "Enable WebSocket client lifecycle logs"
+                default y
+
+            config QM_WEBSOCKET_CLIENT_LOG_CONTROL
+                bool "Enable WebSocket client control logs"
+                default n
+
+            config QM_WEBSOCKET_CLIENT_LOG_TX
+                bool "Enable WebSocket client uplink logs"
+                default n
+
+            config QM_WEBSOCKET_CLIENT_LOG_RX
+                bool "Enable WebSocket client downlink logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

@@ -1,0 +1,16 @@
+menu "mtrace"
+
+    config QM_MTRACE_SUPPORT
+        bool "qm mtrace support"
+        default n
+
+    if QM_MTRACE_SUPPORT
+        config MAX_FILE_NAME_LENGTH
+            int "file name length"
+            default 128
+            range 16 256
+
+    endif
+
+           
+endmenu

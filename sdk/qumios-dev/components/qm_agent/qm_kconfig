@@ -1,0 +1,267 @@
+menu "qm_agent"
+
+    config QM_AGENT_SUPPORT
+        bool "qm_agent support"
+        depends on QM_OS_SUPPORT
+        depends on QM_OS_TASK_SUPPORT
+        depends on QM_OS_QUEUE_SUPPORT
+        depends on QM_OS_SEM_SUPPORT
+        depends on QM_OS_MUTEX_SUPPORT
+        select QM_AUDIO_SUPPORT
+        select QM_WORK_SUPPORT
+        select QM_BACKOFF_SUPPORT
+        select QM_TIMER
+        select QM_LIST
+        help
+            Enable the QUMI agent session framework.
+
+    if QM_AGENT_SUPPORT
+
+        config QM_AGENT_LOG_CONFIG
+            bool "Enable qm_agent log category configuration"
+            default n
+            help
+                Enable per-category qm_agent log configuration. When disabled,
+                only error and lifecycle logs remain enabled by default.
+
+        if QM_AGENT_LOG_CONFIG
+
+            config QM_AGENT_LOG_ERROR
+                bool "Enable qm_agent error logs"
+                default y
+
+            config QM_AGENT_LOG_LIFECYCLE
+                bool "Enable qm_agent lifecycle logs"
+                default y
+
+            config QM_AGENT_LOG_CONTROL
+                bool "Enable qm_agent control logs"
+                default n
+
+            config QM_AGENT_LOG_UPLINK
+                bool "Enable qm_agent uplink logs"
+                default n
+
+            config QM_AGENT_LOG_DOWNLINK
+                bool "Enable qm_agent downlink logs"
+                default n
+
+            config QM_AGENT_LOG_PAYLOAD
+                bool "Enable qm_agent payload logs"
+                default n
+
+            config QM_AGENT_LOG_STATS
+                bool "Enable qm_agent statistics logs"
+                default n
+
+        endif
+
+        menu "qm_agent modules"
+
+            config QM_AGENT_MAX_MODULES
+                int "qm_agent managed module capacity"
+                range 0 32
+                default 8
+                help
+                    Maximum number of modules that one qm_agent session config
+                    can collect through qm_agent_config_add_module().
+
+        endmenu
+
+        config QM_AGENT_ENABLE_AUDIO
+            bool "Enable qm_agent audio capability"
+            default y
+            help
+                Enable playback through qm_audio Control and microphone upload
+                through the shared Engine capture subscription.
+
+        config QM_AGENT_AUDIO_ACQUIRE_TIMEOUT_MS
+            int "Default Agent playback admission timeout (ms)"
+            range 1 60000
+            default 1000
+            depends on QM_AGENT_ENABLE_AUDIO
+            help
+                Deadline for a PUSH operation waiting behind another business.
+                An explicit audio.playback descriptor overrides this default.
+
+        config QM_AGENT_AUDIO_OPERATION_TIMEOUT_MS
+            int "Agent audio operation stop/wait/release timeout (ms)"
+            range 1 60000
+            default 1000
+            depends on QM_AGENT_ENABLE_AUDIO
+            help
+                Bounded wait for one owned Audio operation's stop, wait, and
+                release sequence. Mirrors qm_audio's
+                QM_AUDIO_CONTROL_OPERATION_TIMEOUT_MS for the Agent bridge.
+
+        config QM_AGENT_AUDIO_RETRY_BASE_MS
+            int "Agent audio cleanup retry base (ms)"
+            range 1 1000
+            default 10
+            depends on QM_AGENT_ENABLE_AUDIO
+
+        config QM_AGENT_AUDIO_RETRY_MAX_MS
+            int "Agent audio cleanup retry maximum (ms)"
+            range QM_AGENT_AUDIO_RETRY_BASE_MS 5000
+            default 200
+            depends on QM_AGENT_ENABLE_AUDIO
+
+        config QM_AGENT_AUDIO_CLEANUP_MAX_RETRY
+            int "Agent audio cleanup release maximum retry"
+            range 1 1000
+            default 20
+            depends on QM_AGENT_ENABLE_AUDIO
+            help
+                Maximum consecutive retries when the lower layer refuses to
+                release an operation (for example api_users is not returned).
+                After this bound the Agent gives up and forces the terminal
+                state so later playback is not blocked forever.
+
+        config QM_AGENT_AUDIO_ENQUEUE_WAIT_MS
+            int "Downlink audio PUSH ring backpressure wait (ms)"
+            range 0 5000
+            default 200
+            depends on QM_AGENT_ENABLE_AUDIO
+            help
+                Bounded wait when the downlink PUSH ring is full. Buffered
+                playback keeps draining the ring while the transport callback
+                blocks, so a network burst is rate-limited to playback speed
+                instead of being dropped. 0 keeps the non-blocking behavior
+                (drop the frame as soon as the ring is full).
+
+        config QM_AGENT_ENABLE_VIDEO
+            bool "Enable qm_agent video capability"
+            default y
+            help
+                Build qm_agent video engine support and allow board video drivers.
+
+        config QM_AGENT_CONTROL_TASK_STACK_SIZE
+            int "qm_agent control task stack size"
+            range 1024 8192
+            default 3072
+            help
+                Stack size for serialized authentication, reconnect, and
+                lifecycle control work.
+
+        config QM_AGENT_CONTROL_TASK_PRIORITY
+            int "qm_agent control task priority"
+            range 1 20
+            default 20
+
+        config QM_AGENT_CONTROL_QUEUE_LEN
+            int "qm_agent control command queue length"
+            range 4 64
+            default 16
+            help
+                Number of pending lifecycle, authentication, transport-state,
+                and request-control commands. Media frames never use this queue.
+
+        config QM_AGENT_CONTROL_STOP_TIMEOUT_MS
+            int "qm_agent control task stop timeout (ms)"
+            range 100 10000
+            default 1000
+
+        config QM_AGENT_EVENT_TEXT_BYTES
+            int "qm_agent public event text snapshot bytes"
+            range 16 1024
+            default 192
+            help
+                Maximum size, including the NUL terminator, of text copied into
+                one low-rate qm_agent default-event-loop notification. Audio
+                and video frames never use this buffer or the event loop.
+
+        choice QM_AGENT_TRANSPORT_CHOICE
+            prompt "qm_agent built-in transport"
+            optional
+            help
+                Select at most one built-in qm_agent transport adapter.
+
+            config QM_AGENT_TRANSPORT_AGORA
+                bool "Enable Agora transport adapter"
+                help
+                    Build the Agora adapter against apps/agora-iot-sdk-ex71x.
+
+            config QM_AGENT_TRANSPORT_BAIDU
+                bool "Enable baidu_chat_agent transport adapter"
+                select BAIDU_CHAT_AGENT_SUPPORT
+                help
+                    Build the qm_agent adapter that reuses the baidu_chat_agent
+                    WebSocket component as its transport backend.
+
+            config QM_AGENT_TRANSPORT_JOYINSIDE
+                bool "Enable JoyInside transport adapter"
+                depends on JOYINSIDE_CLIENT_SUPPORT
+                help
+                    Build the qm_agent adapter that reuses the joyinside_client
+                    component as its transport backend.
+
+            config QM_AGENT_TRANSPORT_LGEINE
+                bool "Enable lgeine transport adapter"
+                depends on LGEINE_AGENT_SUPPORT
+                help
+                    Build the qm_agent adapter that reuses the lgeine_agent
+                    WebSocket protocol component as its transport backend.
+
+        endchoice
+
+        choice QM_AGENT_AUTH_CHANNEL_CHOICE
+            prompt "qm_agent auth channel"
+            default QM_AGENT_AUTH_CHANNEL_MQTT
+            help
+                Select the built-in credential request channel used by
+                qm_agent_auth when a transport requires automatic auth.
+
+            config QM_AGENT_AUTH_CHANNEL_MQTT
+                bool "MQTT device topic"
+                help
+                    Request credentials through getAgentToken and consume
+                    getAgentTokenReply from qm_iot device topics.
+
+            config QM_AGENT_AUTH_CHANNEL_HTTP
+                bool "HTTP getAgentToken API"
+                select QM_HTTP_CLIENT_SUPPORT
+                select QM_HMAC
+                help
+                    Request credentials through the LJYD HTTP API using the
+                    same product signing fields as dynreg.
+
+        endchoice
+
+        if QM_AGENT_TRANSPORT_AGORA
+
+            config QM_AGENT_AGORA_SDK_LOG_DISABLE
+                bool "Disable Agora SDK internal log output"
+                default n
+                help
+                    Disable the Agora SDK log callback output. The qm_agent
+                    adapter logs are still controlled by the normal QUMI log
+                    configuration.
+
+            config QM_AGENT_AGORA_STREAM_QUEUE_LEN
+                int "Agora stream parser queue length"
+                range 1 64
+                default 16
+                help
+                    Number of pending Agora stream text packets that can be
+                    buffered before the parser task catches up.
+
+            config QM_AGENT_AGORA_STREAM_TASK_STACK_SIZE
+                int "Agora stream parser task stack size"
+                range 2048 16384
+                default 4096
+                help
+                    Stack size for parsing Agora stream packets, base64 payloads,
+                    and JSON subtitles/events outside the RTC callback task.
+
+            config QM_AGENT_AGORA_STREAM_TASK_PRIORITY
+                int "Agora stream parser task priority"
+                range 1 20
+                default 20
+                help
+                    Task priority for the Agora stream parser worker.
+
+        endif
+
+    endif
+
+endmenu

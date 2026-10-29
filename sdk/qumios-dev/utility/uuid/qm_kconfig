@@ -1,0 +1,10 @@
+menu "uuid"
+
+    config QM_UUID
+        bool "uuid support"
+        default n
+        depends on QM_OS_SUPPORT
+        help
+            Enable UUID helpers based on QUMI random API.
+
+endmenu

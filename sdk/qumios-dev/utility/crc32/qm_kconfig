@@ -1,0 +1,7 @@
+menu "crc32"
+
+    config QM_CRC32
+        bool "QM crc32 support"
+        default "n"
+        
+endmenu

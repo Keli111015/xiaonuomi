@@ -1,0 +1,9 @@
+menu "TinyCBOR"
+
+config QM_TINYCBOR_SUPPORT
+    bool "TinyCBOR support"
+    default y
+    help
+        Enable the public TinyCBOR implementation used by QUMI components.
+
+endmenu

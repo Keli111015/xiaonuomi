@@ -1,0 +1,7 @@
+menu "fs"
+
+  config QM_FS_SUPPORT
+    bool "generic file I/O support"
+    default "y"
+
+endmenu

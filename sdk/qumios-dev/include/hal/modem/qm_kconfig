@@ -1,0 +1,7 @@
+menu "modem"
+
+    config QM_MODEM_SUPPORT
+        bool "modem support"
+        default "n"
+
+endmenu

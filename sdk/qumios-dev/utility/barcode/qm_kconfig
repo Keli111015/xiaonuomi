@@ -1,0 +1,7 @@
+menu "barcode"
+
+    config QM_BARCODE_SUPPORT
+        bool "qm barcode support"
+        default "n"
+        
+endmenu

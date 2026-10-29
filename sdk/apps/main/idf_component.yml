@@ -1,0 +1,19 @@
+dependencies:
+  idf:
+    version: '>=5.3.0'
+  78/esp-opus: "1.0.5"
+  esp-idf-lib/mpu6050: "2.1.9"
+  esp-idf-lib/i2cdev: "2.1.2"
+  esp-idf-lib/esp_idf_lib_helpers: "1.4.0"
+  espressif/led_strip: "3.0.3"
+  coco_pose:
+    path: pose/private/coco_pose
+  espressif/esp_video: "2.2.0"
+  espressif/esp_cam_sensor: "2.2.0"
+  # 精确版本须与 apps/managed_components 入库快照一致。lock 不入库，
+  # 克隆后第一次求解若用范围版本会漂走并改写组件目录。
+  espressif/esp_sccb_intf: "0.0.9"
+  espressif/usb_host_uvc: "2.5.2"
+  espressif/cmake_utilities: "0.5.3"
+  espressif/esp-dsp: "1.8.2"
+  espressif/esp_new_jpeg: "1.0.2"

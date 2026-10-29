@@ -1,0 +1,7 @@
+menu "multi timer"
+
+    config MULTI_TIMER_SUPPORT
+        bool "multi timer support"
+        default "n"
+        
+endmenu

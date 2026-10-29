@@ -1,0 +1,7 @@
+menu "md5"
+
+    config QM_MD5
+        bool "qm md5 support"
+        default "n"
+        
+endmenu

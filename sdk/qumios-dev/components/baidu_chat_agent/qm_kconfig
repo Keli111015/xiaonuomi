@@ -1,0 +1,80 @@
+menu "baidu_chat_agent"
+
+    config BAIDU_CHAT_AGENT_SUPPORT
+        bool "baidu_chat_agent support"
+        default n
+        depends on QM_OS_SUPPORT
+        select QM_WEBSOCKET_CLIENT_SUPPORT
+        select QM_STRING
+        select CJSON_LIB
+        help
+            Enable the Baidu Chat Agent realtime interaction component.
+
+    if BAIDU_CHAT_AGENT_SUPPORT
+
+        config BAIDU_CHAT_AGENT_WS_RX_SIZE
+            int "baidu_chat_agent WebSocket receive buffer size"
+            default 4096
+
+        config BAIDU_CHAT_AGENT_TIMEOUT_MS
+            int "baidu_chat_agent network timeout (ms)"
+            default 5000
+
+        config BAIDU_CHAT_AGENT_RECONNECT_INTERVAL_MS
+            int "baidu_chat_agent reconnect interval (ms)"
+            default 1000
+
+        config BAIDU_CHAT_AGENT_WS_TASK_STACK_SIZE
+            int "baidu_chat_agent WebSocket task stack size"
+            default 8192
+
+        config BAIDU_CHAT_AGENT_WS_TASK_PRIORITY
+            int "baidu_chat_agent WebSocket task priority"
+            default 5
+
+        config BAIDU_CHAT_AGENT_SEND_QUEUE_SIZE
+            int "baidu_chat_agent WebSocket send queue size"
+            default 8
+
+        config BAIDU_CHAT_AGENT_LOG_CONFIG
+            bool "Enable baidu_chat_agent log category configuration"
+            default n
+            help
+                Enable category-level default log controls for baidu_chat_agent.
+                When disabled, error and lifecycle logs remain enabled.
+
+        if BAIDU_CHAT_AGENT_LOG_CONFIG
+
+            config BAIDU_CHAT_AGENT_LOG_ERROR
+                bool "Enable baidu_chat_agent error logs"
+                default y
+
+            config BAIDU_CHAT_AGENT_LOG_LIFECYCLE
+                bool "Enable baidu_chat_agent lifecycle logs"
+                default y
+
+            config BAIDU_CHAT_AGENT_LOG_CONTROL
+                bool "Enable baidu_chat_agent control logs"
+                default n
+
+            config BAIDU_CHAT_AGENT_LOG_UPLINK
+                bool "Enable baidu_chat_agent uplink logs"
+                default n
+
+            config BAIDU_CHAT_AGENT_LOG_DOWNLINK
+                bool "Enable baidu_chat_agent downlink logs"
+                default n
+
+            config BAIDU_CHAT_AGENT_LOG_PAYLOAD
+                bool "Enable baidu_chat_agent payload logs"
+                default n
+
+            config BAIDU_CHAT_AGENT_LOG_STATS
+                bool "Enable baidu_chat_agent statistics logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

@@ -1,0 +1,26 @@
+/*
+ * Minimal qm_agent example configuration.
+ * Merge these options into the target project's generated qm_config.h.
+ */
+#pragma once
+
+#define CONFIG_QM_OS_SUPPORT 1
+#define CONFIG_QM_OS_TASK_SUPPORT 1
+#define CONFIG_QM_OS_MUTEX_SUPPORT 1
+#define CONFIG_QM_OS_SEM_SUPPORT 1
+#define CONFIG_QM_OS_QUEUE_SUPPORT 1
+#define CONFIG_QM_OS_TIMER_SUPPORT 1
+#define CONFIG_QM_WORK_SUPPORT 1
+#define CONFIG_QM_WIFI_SUPPORT 1
+
+#define CONFIG_QM_AGENT_SUPPORT 1
+#define CONFIG_QM_AUDIO_SUPPORT 1
+#define CONFIG_QM_AUDIO_PLAYBACK_ARBITER_SUPPORT 1
+#define CONFIG_JOYINSIDE_CLIENT_SUPPORT 1
+#define CONFIG_QM_AGENT_EXAMPLE_CONFIG 1
+#define CONFIG_QM_AGENT_EXAMPLE_USE_CUSTOM_TRANSPORT 1
+#define CONFIG_QM_AGENT_EXAMPLE_USE_WIFI 1
+#define CONFIG_QM_AGENT_EXAMPLE_WIFI_SSID "your_ssid"
+#define CONFIG_QM_AGENT_EXAMPLE_WIFI_PASSWORD "your_password"
+#define CONFIG_QM_AGENT_EXAMPLE_START_TEXT "hello qm_agent"
+#define CONFIG_QM_AGENT_EXAMPLE_TTS_TEXT "qm_agent example is ready"

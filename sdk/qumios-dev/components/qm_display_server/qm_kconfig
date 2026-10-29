@@ -1,0 +1,64 @@
+menu "QUMI display controller server"
+
+    config QM_DISPLAY_SERVER_SUPPORT
+        bool "QUMI display controller server support"
+        default n
+        select QM_TIMER
+        select QM_CRC
+        help
+            Enable the screen-controller side of display protocol V1.0.
+
+    if QM_DISPLAY_SERVER_SUPPORT
+
+        config QM_DISPLAY_SERVER_TRANSACTION_CACHE_SIZE
+            int "transaction cache entry count"
+            range 32 128
+            default 32
+
+        config QM_DISPLAY_SERVER_TRANSACTION_CACHE_MS
+            int "transaction cache lifetime (ms)"
+            range 5000 60000
+            default 5000
+
+        config QM_DISPLAY_SERVER_LOG_CONFIG
+            bool "Enable qm_display_server log category configuration"
+            default n
+            help
+                Enable category-level logging for qm_display_server.
+                When disabled, only error and lifecycle logs are enabled.
+
+        if QM_DISPLAY_SERVER_LOG_CONFIG
+
+            config QM_DISPLAY_SERVER_LOG_ERROR
+                bool "qm_display_server error logs"
+                default y
+
+            config QM_DISPLAY_SERVER_LOG_LIFECYCLE
+                bool "qm_display_server lifecycle logs"
+                default y
+
+            config QM_DISPLAY_SERVER_LOG_CONTROL
+                bool "qm_display_server control logs"
+                default n
+
+            config QM_DISPLAY_SERVER_LOG_UPLINK
+                bool "qm_display_server uplink logs"
+                default n
+
+            config QM_DISPLAY_SERVER_LOG_DOWNLINK
+                bool "qm_display_server downlink logs"
+                default n
+
+            config QM_DISPLAY_SERVER_LOG_PAYLOAD
+                bool "qm_display_server payload logs"
+                default n
+
+            config QM_DISPLAY_SERVER_LOG_STATS
+                bool "qm_display_server statistics logs"
+                default n
+
+        endif
+
+    endif
+
+endmenu

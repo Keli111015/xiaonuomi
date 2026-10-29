@@ -1,0 +1,130 @@
+menu "sfud"
+
+    config SFUD_SUPPORT
+        bool "sfud support"
+        default "n"        
+
+    if SFUD_SUPPORT
+        config SFUD_DEBUG_ON
+            bool "config log on or off"
+            default "n"    
+
+        choice 
+            prompt "choice sufd using type"
+            default SFUD_USING_SFDP
+
+            config  SFUD_USING_SFDP
+                bool "Automatic recognition of flash (only support JEDEC JESD216 standard)"  
+
+            config SFUD_USING_FLASH_INFO_TABLE
+                bool "choice SFUD supported flash chip."
+
+            if SFUD_USING_FLASH_INFO_TABLE
+                choice 
+                    prompt "choice chip"
+                    config SFUD_CHIP_AT45DB161E
+                    bool "AT45DB161E"
+                    config SFUD_CHIP_W25Q40BV
+                    bool "W25Q40BV"
+                    config SFUD_CHIP_W25X40CL
+                    bool "W25X40CL"
+                    config SFUD_CHIP_W25X16AV
+                    bool "W25X16AV"
+                    config SFUD_CHIP_W25Q16BV
+                    bool "W25Q16BV"
+                    config SFUD_CHIP_W25Q32BV
+                    bool "W25Q32BV"
+                    config SFUD_CHIP_W25Q64CV
+                    bool "W25Q64CV"
+                    config SFUD_CHIP_W25Q64DW
+                    bool "W25Q64DW"
+                    config SFUD_CHIP_W25Q128BV
+                    bool "W25Q128BV"
+                    config SFUD_CHIP_W25Q256FV
+                    bool "W25Q256FV"
+                    config SFUD_CHIP_SST25VF080B
+                    bool "SST25VF080B"
+                    config SFUD_CHIP_SST25VF016B
+                    bool "SST25VF016B"
+                    config SFUD_CHIP_M25P32
+                    bool "M25P32"
+                    config SFUD_CHIP_M25P80
+                    bool "M25P80"
+                    config SFUD_CHIP_M25P40
+                    bool "M25P40"
+                    config SFUD_CHIP_EN25Q32B
+                    bool "EN25Q32B"
+                    config SFUD_CHIP_GD25Q16B
+                    bool "GD25Q16B"
+                    config SFUD_CHIP_GD25Q32C
+                    bool "GD25Q32C"
+                    config SFUD_CHIP_S25FL216K
+                    bool "S25FL216K"
+                    config SFUD_CHIP_S25FL032P
+                    bool "S25FL032P"
+                    config SFUD_CHIP_A25L080
+                    bool "A25L080"
+                    config SFUD_CHIP_F25L004
+                    bool "F25L004"
+                    config SFUD_CHIP_PCT25VF016B
+                    bool "PCT25VF016B"
+                    config SFUD_CHIP_NM25Q128EVB
+                    bool "NM25Q128EVB"
+                endchoice
+            endif
+        endchoice
+
+
+        config SFUD_USING_QSPI
+            bool "use qspi"
+            default "n"   
+
+        config SFUD_SPI_PORT
+            int "config spi port"
+            default 1
+            range 0 4 
+
+        config SFUD_SPI_CLOCK_SPEED
+            int "config spi clock speed (unit : hz)"
+            default 8000000
+            range 0 40000000 
+
+        config SFUD_SPI_MISO_PIN
+            int "config spi miso pin"
+            default 4
+            range 1 100 
+
+        config SFUD_SPI_MOSI_PIN
+            int "config spi mosi pin"
+            default 5
+            range 1 100 
+
+        config SFUD_SPI_SCLK_PIN
+            int "config spi sclk pin"
+            default 6
+            range 1 100 
+
+        config SFUD_SPI_CS_PIN
+            int "config spi cs pin"
+            default 7
+            range 1 100 
+
+        config SFUD_RETRY_DELAY_US
+            int "config every retry's delay (unit : us)"
+            default 100
+            range 1 1000 
+
+        config SFUD_ERROR_RETRY_TIME
+            int "config sfud default times for error retry (unit : s)"
+            default 30
+            range 1 1000 
+
+        config SFUD_DEVICE_NAME
+            string "config sfud spi device name"
+            default "XJ_SPI_FLASH"  
+
+        config SFUD_SPI_NAME
+            string "config sfud spi port name"
+            default "EXT_SPI1"  
+    endif
+endmenu

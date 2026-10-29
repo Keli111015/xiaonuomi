@@ -1,0 +1,52 @@
+menu "pppos"
+
+    config QM_PPPOS_CLIENT_SUPPORT
+        bool "qm pppos client"
+        default n
+        select QM_WORK_SUPPORT
+
+    if QM_PPPOS_CLIENT_SUPPORT
+        choice
+            prompt "select data interface"
+            default QM_PPPOS_CLIENT_UART_SUPPORT
+
+            config QM_PPPOS_CLIENT_UART_SUPPORT
+                bool "qm uart"
+                select QM_UART_SUPPORT
+        endchoice
+
+        if QM_PPPOS_CLIENT_UART_SUPPORT
+        
+            config QM_PPPOS_CLIENT_UART_PORT
+            int "uart port"
+            default 2
+
+            config QM_PPPOS_CLIENT_UART_BAUDATE
+            int "uart baudrate"
+            default 115200
+
+            config QM_PPPOS_CLIENT_UART_TX_PIN
+            int "uart tx pin"
+            default 5
+            
+            config QM_PPPOS_CLIENT_UART_RX_PIN
+            int "uart rx pin"
+            default 17
+        
+        endif
+
+        config QM_PPPOS_MODULE_POWERKEY_PIN
+        int "powerkey pin"
+        default 23
+
+        config QM_PPPOS_CLIENT_TASK_SIZE
+            int "pppos client task size"
+            default 4096
+
+        config QM_PPPOS_CLIENT_TASK_PRIO
+            int "pppos client task prio"
+            default 20
+
+    endif
+
+endmenu
