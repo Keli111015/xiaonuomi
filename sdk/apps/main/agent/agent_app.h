@@ -14,6 +14,8 @@ int agent_app_init(void *iot_handle);
 int agent_app_leave(void);
 /* 返回 1 表示 agent 会话正在运行（唤醒后已 start 且尚未 leave）。 */
 int agent_app_is_active(void);
+/* 返回 1 表示当前正处于语音交互活跃窗口（listening / thinking / speaking 或等待 TTS 完成）。 */
+int agent_app_is_dialog_busy(void);
 /* 以本地提示音方式播一段已按 qm_audio 线上格式编好的音频；会话未创建时返回 -QM_EINIT。 */
 int agent_app_play_local_audio(const void *data, uint32_t len);
 

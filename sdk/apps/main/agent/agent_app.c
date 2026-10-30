@@ -38,6 +38,7 @@ static volatile uint8_t s_tts_playback_failed;
 static volatile int s_tts_playback_error;
 static volatile uint8_t s_tts_silent_seen;
 static volatile uint8_t s_tts_input_complete_posted;
+static volatile qm_agent_dialog_state_t s_dialog_state = QM_AGENT_DIALOG_STATE_NONE;
 
 static void abort_tts_wait(void);
 static void on_wakeup(void); /* [MODIFIED] 前置声明：供开机连云自动唤醒调用 */
@@ -164,6 +165,7 @@ static void on_agent_event(void *event_handler_arg,
             QM_LOGI(LOG_TAG, "agora connected");
             break;
         case QM_AGENT_EVENT_DISCONNECTED:
+            s_dialog_state = QM_AGENT_DIALOG_STATE_NONE;
             QM_LOGW(LOG_TAG, "agora disconnected");
             break;
         case QM_AGENT_EVENT_ASR:
@@ -186,6 +188,7 @@ static void on_agent_event(void *event_handler_arg,
                     notice->data.text.text);
             break;
         case QM_AGENT_EVENT_AGENT_STATE:
+            s_dialog_state = notice->data.agent_state.state;
             QM_LOGI(LOG_TAG, "dialog=%s",
                     dialog_name(notice->data.agent_state.state));
             /* The core may re-enable upload when it reports speaking. The
@@ -352,6 +355,7 @@ static void agent_on_cloud_disconnected(void)
 
     s_cloud_connected = 0;
     s_agent_started = 0;
+    s_dialog_state = QM_AGENT_DIALOG_STATE_NONE;
     abort_tts_wait();
     if (s_agent == NULL) {
         return;
@@ -388,6 +392,7 @@ int agent_app_leave(void)
     ret = qm_agent_stop(s_agent);
     if (ret == QM_EOK) {
         s_agent_started = 0;
+        s_dialog_state = QM_AGENT_DIALOG_STATE_NONE;
     }
     QM_LOGI(LOG_TAG, "leave stop ret=%d state=%s",
             ret, life_name(qm_agent_get_state(s_agent)));
@@ -397,6 +402,19 @@ int agent_app_leave(void)
 int agent_app_is_active(void)
 {
     return (s_agent_started != 0) ? 1 : 0;
+}
+
+int agent_app_is_dialog_busy(void)
+{
+    if (!s_agent_started) {
+        return 0;
+    }
+    if (s_waiting_tts_complete) {
+        return 1;
+    }
+    return (s_dialog_state == QM_AGENT_DIALOG_STATE_LISTENING ||
+            s_dialog_state == QM_AGENT_DIALOG_STATE_THINKING ||
+            s_dialog_state == QM_AGENT_DIALOG_STATE_SPEAKING) ? 1 : 0;
 }
 
 int agent_app_play_local_audio(const void *data, uint32_t len)
@@ -713,6 +731,8 @@ static void on_wakeup(void)
     }
     if (s_agent_started) {
         (void)agent_app_abort_output();
+        /* [MODIFIED] 唤醒词打断播报后，立即恢复麦克风音频上行，防止被 abort_output 永久置为 FALSE */
+        qm_agent_set_upload_enabled(s_agent, QM_TRUE);
         return;
     }
     ret = qm_agent_start(s_agent);
@@ -732,7 +752,11 @@ static void wake_cli_cmd(char *buf, int len, int argc, char **argv)
     QM_LOGI(LOG_TAG, "CLI trigger wakeup");
     on_wakeup();
     if (argc > 1 && s_agent != NULL && s_agent_started) {
-        (void)qm_agent_send_text(s_agent, argv[1]);
+        /* Agora transport 不支持 qm_agent_send_text (-QM_ENOSYS)，改用 HTTP 语料接口并在结束后恢复上行 */
+        if (agent_app_user_corpus(argv[1]) == QM_EOK) {
+            (void)agent_app_wait_tts_complete(AGENT_CORPUS_TIMEOUT_MS);
+        }
+        (void)agent_app_set_resource_mode(QM_FALSE);
     }
 }
 

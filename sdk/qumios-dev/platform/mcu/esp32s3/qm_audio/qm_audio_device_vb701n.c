@@ -245,7 +245,7 @@ static void on_mic(const uint8_t *data, uint16_t len, void *user)
     int dropped = 0;
 
     (void)user;
-    if (data == NULL || len == 0 || len > VB701N_AUDIO_SLOT_MAX) {
+    if (!g_cap || data == NULL || len == 0 || len > VB701N_AUDIO_SLOT_MAX) {
         return;
     }
     if ((len & 1u) != 0) {
@@ -772,6 +772,18 @@ int qm_audio_device_capture_start(void *ctx)
     }
     if (g_cap) {
         return -QM_EBUSY;
+    }
+    qm_mutex_lock(&g_lock, QM_WAIT_FOREVER);
+    g_head = 0;
+    g_tail = 0;
+    g_count = 0;
+    g_opus_head = 0;
+    g_opus_tail = 0;
+    g_opus_count = 0;
+    qm_mutex_unlock(&g_lock);
+    while (qm_sem_wait(&g_sem, 0) == QM_EOK) {
+    }
+    while (qm_sem_wait(&g_opus_sem, 0) == QM_EOK) {
     }
     g_abort_read = 0;
     g_cap = 1;
