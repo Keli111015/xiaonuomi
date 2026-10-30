@@ -3,6 +3,9 @@
 #include "qm_log.h"
 #include "qm_pwm.h"
 #include "qm_cli.h"
+#if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
+#include "bsp_camera.h"
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -162,8 +165,16 @@ static void servo_move_task(void *arg)
 
 qm_err_t bsp_servo_init(void)
 {
-#if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
-    QM_LOGE(LOG_TAG, "GPIO4 conflicts with camera; servo disabled");
+#if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST && \
+    (BSP_SERVO_PWM_PIN == BSP_CAM_CS_GPIO || \
+     BSP_SERVO_PWM_PIN == BSP_CAM_SDA_GPIO || \
+     BSP_SERVO_PWM_PIN == BSP_CAM_SCL_GPIO || \
+     BSP_SERVO_PWM_PIN == BSP_CAM_SCLK_GPIO || \
+     BSP_SERVO_PWM_PIN == BSP_CAM_DATA0_GPIO || \
+     BSP_SERVO_PWM_PIN == BSP_CAM_PWDN_GPIO || \
+     BSP_SERVO_PWM_PIN == BSP_CAM_RESET_GPIO || \
+     BSP_SERVO_PWM_PIN == BSP_CAM_XCLK_GPIO)
+    QM_LOGE(LOG_TAG, "GPIO%d conflicts with camera; servo disabled", BSP_SERVO_PWM_PIN);
     return -QM_EBUSY;
 #endif
     uint16_t boot_pulse;

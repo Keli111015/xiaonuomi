@@ -15,7 +15,7 @@ MorphCube（小诺米）桌面学习陪伴机器人的黑客松板端原型仓�
 
 已有早期CAD脚本和参数保存在[cad/morphcube-v1a](cad/morphcube-v1a/README.md)，属于未完成真实装配验收的历史原型。
 
-摄像头新版连续20帧校验通过，无人识别返回无法判断约1.78秒；**真人坐姿准确率尚未验收，用户已决定暂缓该功能。** 舵机GPIO4与摄像头冲突，不要同时启用；servo face是预设角度，不是自动追踪。
+摄像头新版连续20帧校验通过，无人识别返回无法判断约1.78秒；**真人坐姿准确率尚未验收，用户已决定暂缓该功能。** 当前主工程已将舵机信号迁到P6，摄像头保留P4，接线见[舵机P6说明](docs/SERVO_P6_WIRING.md)；servo face是预设角度，不是自动追踪。
 
 ```powershell
 python -m unittest discover -s tools/camera -p "test_*.py"

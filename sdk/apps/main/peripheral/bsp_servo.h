@@ -9,9 +9,9 @@ extern "C" {
 
 /*
  * Nominal mapping only. No shaft-position feedback. Bench range 75..105deg.
- * 信号 GPIO4，电源 4.8V，地共地。
+ * 信号 P6 / GPIO6，电源 4.8V，地共地。P4 留给摄像头 VSYNC/CS。
  */
-#define BSP_SERVO_PWM_PIN           4
+#define BSP_SERVO_PWM_PIN           6
 #define BSP_SERVO_PWM_HZ            50
 #define BSP_SERVO_PWM_RES_BIT       14
 
