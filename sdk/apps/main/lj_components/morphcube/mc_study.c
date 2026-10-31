@@ -41,7 +41,8 @@ bool mc_study_pose(mc_study *s, mc_pose pose, uint64_t now)
         s->abnormal_ms = 0;
         return false;
     }
-    if (!s->has_pose || now < s->pose_ms || now - s->pose_ms > 2000) {
+    /* 抽样周期 2 秒；若超过 8 秒未有新的不良样本（例如中途检测跳过或恢复正常），重置累计时长 */
+    if (!s->has_pose || now < s->pose_ms || now - s->pose_ms > 8000) {
         s->abnormal_ms = 0;
     } else {
         uint64_t dt = now - s->pose_ms;

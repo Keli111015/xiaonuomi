@@ -43,6 +43,8 @@ extern "C" {
 
 esp_err_t bsp_camera_early_init(void);
 esp_err_t bsp_camera_stream_start(void);
+esp_err_t bsp_camera_stream_stop(void);
+esp_err_t bsp_camera_pose_request(int rotation, bool calibrate);
 esp_err_t bsp_camera_start(void);
 bool bsp_camera_is_available(void);
 int bsp_camera_cli_init(void);

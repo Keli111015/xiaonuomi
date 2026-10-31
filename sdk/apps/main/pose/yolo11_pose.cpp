@@ -147,7 +147,30 @@ static void analyze_pose_result(const dl::detect::result_t &res,
     out->lean=(kp[0]-(kp[10]+kp[12])*0.5f)/sw;
     out->eye_w_ratio=ew/img_w;
     out->head_down_ratio=(kp[1]-shoulder_y)/sw;
-    if (!out->calibrated) return;
+
+    /* 若尚未完成 3 帧基准校准：
+     * 1. 先用绝对阈值判断当前是否为明显不良坐姿；
+     * 2. 若当前坐姿基本端正，则自动将其纳入 3 帧个人坐正基准校准（实现开启专注后自动无感校准）。 */
+    if (!out->calibrated) {
+        bool abs_tilt = fabsf(out->roll) > POSE_ROLL_BAD_MIN * 1.8f ||
+                        fabsf(out->shoulder_diff) > POSE_SHOULDER_BAD_MIN * 4.0f ||
+                        fabsf(out->lean) > POSE_LEAN_BAD_MIN;
+        bool abs_close = out->eye_w_ratio > POSE_CLOSE_EYE_RATIO * 1.4f;
+        bool abs_down = out->head_down_ratio > POSE_HEAD_DOWN_RATIO;
+        if (!abs_tilt && !abs_close && !abs_down) {
+            int cnt = yolo11_pose_calibration_add(out);
+            out->calibrated = (cnt >= 3);
+            ESP_LOGI(TAG, "auto-calibration sample accepted: %d/3", cnt);
+        }
+        if (!out->calibrated) {
+            out->err_type = pick_primary_pose_err(false, abs_tilt, abs_close, abs_down);
+            out->status = (out->err_type == YOLO11_POSE_ERR_NONE)
+                              ? YOLO11_POSE_FRAME_OK
+                              : YOLO11_POSE_FRAME_BAD_POSTURE;
+            return;
+        }
+    }
+
     bool tilt = fabsf(out->roll-s_baseline.roll)>0.15f ||
                 fabsf(out->shoulder_diff-s_baseline.shoulder_diff)>0.12f ||
                 fabsf(out->lean-s_baseline.lean)>0.18f;
@@ -995,10 +1018,22 @@ extern "C" esp_err_t yolo11_pose_decode_jpg_to_rgb565(const uint8_t *jpg_data,
 extern "C" void yolo11_pose_prealloc_buffers(void)
 {
     size_t px = (size_t)240 * 320;
-    (void)decode_buf_get(px * 3);
     (void)rotate_dst_buf_get(px * 3);
     (void)native_rgb_buf_get(px * 3);
     ESP_LOGI(TAG, "prealloc resident bufs done, psram free=%u largest=%u",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+}
+
+extern "C" void yolo11_pose_release_decode_buf(void)
+{
+    if (s_decode_buf != nullptr) {
+        size_t freed = s_decode_buf_size;
+        heap_caps_free(s_decode_buf);
+        s_decode_buf = nullptr;
+        s_decode_buf_size = 0;
+        ESP_LOGI(TAG, "decode buf released, freed=%u bytes, psram free=%u",
+                 (unsigned)freed,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    }
 }

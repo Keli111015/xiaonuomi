@@ -43,6 +43,7 @@ int yolo11_pose_calibration_add(const yolo11_pose_frame_result_t *sample);
 
 /** 启动早期预分配姿态链路常驻缓冲（解码/旋转/原生RGB），避免运行时抢连续 PSRAM。 */
 void yolo11_pose_prealloc_buffers(void);
+void yolo11_pose_release_decode_buf(void);
 
 /** UYVY 转常驻 RGB888，不旋转（传感器 240×320 竖图）。成功后 *out_rgb888 不要 free。 */
 esp_err_t yolo11_pose_uyvy_to_rgb888(const uint8_t *uyvy,

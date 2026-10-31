@@ -12,7 +12,7 @@ stop=threading.Event()
 pending=threading.Event()
 state=dict(frames=0,last=0,error='正在连接开发板',bad_frames=0,jpeg=None,
            pose_busy=False,pose_result='先调整画面方向，再坐正校准',rotation=0,action='pose')
-uart=serial.Serial();uart.port='COM5';uart.baudrate=115200;uart.timeout=.15;uart.dtr=False;uart.rts=False
+uart=serial.Serial();uart.port='COM4';uart.baudrate=115200;uart.timeout=.15;uart.dtr=False;uart.rts=False
 log_file=Path(__file__).with_name('reliable-preview-log.txt')
 
 def capture():
