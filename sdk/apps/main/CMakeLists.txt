@@ -48,6 +48,7 @@ message(STATUS "app camera test=${APP_CAMERA_TEST}")
 set(COMPONENT_SRCS
     "./main.c"
     "./agent/agent_app.c"
+    "./agent/study_voice_guard.c"
     "./cloud/ljyd_cloud.c"
     "./cloud/ljyd_method.c"
     "./cloud/ljyd_provision.c"
@@ -172,7 +173,10 @@ if(LJYD_PLAYBACK_SUPPORT)
 endif()
 
 if(APP_CAMERA_TEST)
-    list(APPEND COMPONENT_SRCS "./peripheral/bsp_camera.c")
+    list(APPEND COMPONENT_SRCS
+        "./peripheral/bsp_camera.c"
+        "./peripheral/cam_debug_streamer.c"
+    )
 endif()
 
 # 闹钟：平台组件和应用层模块一起开关，CONFIG_QM_ALARM_SUPPORT 0 时两者都不编译
@@ -186,7 +190,7 @@ endif()
 if(QM_POSE_SUPPORT)
     list(APPEND COMPONENT_SRCS
         "./pose/yolo11_pose.cpp"
-        "./pose/example_pose.c"
+        "./pose/vision_service.c"
     )
 endif()
 

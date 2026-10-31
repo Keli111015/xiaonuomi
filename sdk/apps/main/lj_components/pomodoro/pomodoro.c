@@ -11,6 +11,9 @@
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
 #include "bsp_camera.h"
 #endif
+#if defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
+#include "vision_service.h"
+#endif
 
 #include <string.h>
 
@@ -72,7 +75,7 @@ static void on_pomodoro_event(qm_pomodoro_t t, const qm_pomodoro_event_data_t *e
                 }
                 else
                 {
-                    esp_err_t pose_ret = bsp_camera_pose_request(90, false);
+                    esp_err_t pose_ret = vision_service_pose_request(90, false);
                     if (pose_ret == ESP_OK)
                     {
                         QM_LOGI(LOG_TAG, "focus 10s tick: trigger posture check (elapsed=%us)",

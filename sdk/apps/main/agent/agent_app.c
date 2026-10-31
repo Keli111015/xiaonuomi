@@ -26,6 +26,7 @@
 #include "qm_cli.h" /* [MODIFIED] 引入 CLI 头文件，用于注册串口 wake 命令 */
 #include "qm_kernel.h"
 #include "voice.h"
+#include "study_voice_guard.h"
 
 #include <string.h>
 
@@ -79,56 +80,6 @@ void agent_app_check_pomodoro_start_sound(void)
         QM_LOGI(LOG_TAG, "no cloud tts within 3s for pomodoro start, play start sound");
         (void)pomodoro_start_sound_start();
     }
-}
-
-static qm_bool is_pomodoro_command_text(const char *text)
-{
-    if (text == NULL || text[0] == '\0') {
-        return QM_FALSE;
-    }
-    qm_bool has_obj = (strstr(text, "番茄钟") != NULL ||
-                       strstr(text, "番茄时钟") != NULL ||
-                       strstr(text, "番茄") != NULL);
-    qm_bool has_act = (strstr(text, "暂停") != NULL ||
-                       strstr(text, "恢复") != NULL ||
-                       strstr(text, "继续") != NULL ||
-                       strstr(text, "退出") != NULL ||
-                       strstr(text, "结束") != NULL ||
-                       strstr(text, "停止") != NULL ||
-                       strstr(text, "关闭") != NULL ||
-                       strstr(text, "开启") != NULL ||
-                       strstr(text, "开始") != NULL ||
-                       strstr(text, "打开") != NULL);
-
-    /* 明确带有 "番茄钟" 或 "番茄时钟" */
-    if (strstr(text, "番茄钟") != NULL || strstr(text, "番茄时钟") != NULL) {
-        return QM_TRUE;
-    }
-    /* 带有 "番茄" 且带有控制动作 (如 "暂停番茄", "结束番茄", "退出番茄") */
-    if (has_obj && has_act) {
-        return QM_TRUE;
-    }
-    /* 纯短控制动词 (全句仅为 "暂停", "恢复", "继续", "结束", "退出" 等) */
-    if (strcmp(text, "暂停") == 0 || strcmp(text, "暂停。") == 0 ||
-        strcmp(text, "恢复") == 0 || strcmp(text, "恢复。") == 0 ||
-        strcmp(text, "继续") == 0 || strcmp(text, "继续。") == 0 ||
-        strcmp(text, "结束") == 0 || strcmp(text, "结束。") == 0 ||
-        strcmp(text, "退出") == 0 || strcmp(text, "退出。") == 0) {
-        return QM_TRUE;
-    }
-    return QM_FALSE;
-}
-
-static qm_bool is_pomodoro_status_tts(const char *text)
-{
-    if (text == NULL || text[0] == '\0') {
-        return QM_FALSE;
-    }
-    if (strstr(text, "番茄时钟已") != NULL ||
-        strstr(text, "番茄钟已") != NULL) {
-        return QM_TRUE;
-    }
-    return QM_FALSE;
 }
 
 void agent_app_set_pomodoro_tts_mute(qm_bool muted)
@@ -311,7 +262,7 @@ static void on_agent_event(void *event_handler_arg,
             }
             if (notice->data.text.text[0] != '\0') {
                 s_turn_asr_seen = 1U;
-                if (is_pomodoro_command_text(notice->data.text.text)) {
+                if (study_voice_guard_is_pomodoro_cmd(notice->data.text.text)) {
                     s_turn_pomodoro_cmd = 1U;
                     agent_app_set_pomodoro_tts_mute(QM_FALSE);
                 } else if (!s_turn_chat_handled && !morphcube_study_runtime_is_focus_active()) {
@@ -333,7 +284,7 @@ static void on_agent_event(void *event_handler_arg,
             if (s_pomodoro_start_pending) {
                 s_pomodoro_start_tts_seen = 1U;
             }
-            if (is_pomodoro_status_tts(notice->data.text.text)) {
+            if (study_voice_guard_is_status_tts(notice->data.text.text)) {
                 s_turn_pomodoro_cmd = 1U;
                 agent_app_set_pomodoro_tts_mute(QM_FALSE);
             } else if (!s_waiting_tts_complete &&

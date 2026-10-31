@@ -13,8 +13,8 @@
 #include "pomodoro.h"
 #include "ljyd_course.h"
 #if defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
-#include "example_pose.h"
 #include "yolo11_pose.h"
+#include "vision_service.h"
 #endif
 
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
@@ -53,18 +53,16 @@ void qm_application_start(void)
     {
         QM_LOGE("main", "yolo11_pose_init failed");
     }
+    if (vision_service_init() != ESP_OK)
+    {
+        QM_LOGE("main", "vision_service_init failed");
+    }
 #endif
-    /* Register only; PWM stays off until an explicit command. */
+    /* 舵机：仅注册 CLI，未收到指令前不启动 PWM */
     if (bsp_servo_cli_init() != QM_EOK)
     {
         QM_LOGE("main", "servo CLI registration failed");
     }
-    // if (bsp_vibrator_init() != QM_EOK) {
-    //     QM_LOGE("main", "vibrator init failed");
-    // } else {
-    //     bsp_vibrator_pulse(BSP_VIBRATOR_PULSE_MS);
-    // }
-    // bsp_ws2812_example();
     if (qm_work_on_init() != QM_EOK)
     {
         QM_LOGE("main", "qm_work_on_init failed");
@@ -85,9 +83,7 @@ void qm_application_start(void)
         QM_LOGE("main", "camera CLI registration failed");
     }
 #endif
-    /* if (bsp_mpu6050_init() != QM_EOK) {
-        QM_LOGE("main", "mpu6050 init failed");
-    } */
+    /* MPU6050 默认 GPIO8 与摄像头 DATA0 冲突，当前保持关闭 */
     if (voice_start() != QM_EOK)
     {
         QM_LOGE("main", "audio init failed");

@@ -1,12 +1,20 @@
 """Run real servo C code with mocked PWM/tasks; no hardware movement.
-Usage: python tools/tests/test_servo_host.py --cc <gcc>
+Usage: python tools/tests/test_servo_host.py [--cc <gcc>]
+Or: python -m unittest discover -s tools/tests -p "test_*.py"
 """
-import argparse, pathlib, subprocess, tempfile
-parser=argparse.ArgumentParser();parser.add_argument('--cc',default='gcc');args=parser.parse_args()
-root=pathlib.Path(__file__).resolve().parents[2]
-with tempfile.TemporaryDirectory(prefix='servo-test-') as tmp:
- p=pathlib.Path(tmp)
- (p/'qm.h').write_text(r"""
+import argparse
+import pathlib
+import subprocess
+import sys
+import tempfile
+import unittest
+
+
+def run_all_tests(cc='gcc'):
+    root = pathlib.Path(__file__).resolve().parents[2]
+    with tempfile.TemporaryDirectory(prefix='servo-test-') as tmp:
+        p = pathlib.Path(tmp)
+        (p / 'qm.h').write_text(r"""
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
@@ -21,9 +29,9 @@ int qm_mutex_new(qm_mutex_t*); int qm_mutex_lock(qm_mutex_t*,int); int qm_mutex_
 int qm_task_new(qm_task_t*,const char*,void(*)(void*),void*,int,int);
 void qm_msleep(int); void qm_task_exit(void*);
 """)
- (p/'qm_log.h').write_text('#define QM_LOGI(...) ((void)0)\n#define QM_LOGW(...) ((void)0)\n#define QM_LOGE(...) ((void)0)\n')
- (p/'qm_cli.h').write_text('')
- (p/'qm_pwm.h').write_text(r"""
+        (p / 'qm_log.h').write_text('#define QM_LOGI(...) ((void)0)\n#define QM_LOGW(...) ((void)0)\n#define QM_LOGE(...) ((void)0)\n')
+        (p / 'qm_cli.h').write_text('')
+        (p / 'qm_pwm.h').write_text(r"""
 #pragma once
 #include "qm.h"
 typedef struct {unsigned freq,pulse;} qm_pwm_config_t;
@@ -31,10 +39,10 @@ typedef struct {int port; struct {int pwm_pin;} pin; qm_pwm_config_t config;} qm
 int qm_pwm_init(qm_pwm_dev_t*); int qm_pwm_stop(qm_pwm_dev_t*);
 int qm_pwm_para_change(qm_pwm_dev_t*,qm_pwm_config_t);
 """)
- for name in ('bsp_servo.c', 'bsp_servo.h'):
-  (p/name).write_bytes((root/'sdk/apps/main/peripheral'/name).read_bytes())
- source='bsp_servo.c'
- (p/'test.c').write_text('#include <assert.h>\n#include <stdio.h>\n#include "'+source+'"\n'+r"""
+        for name in ('bsp_servo.c', 'bsp_servo.h'):
+            (p / name).write_bytes((root / 'sdk/apps/main/peripheral' / name).read_bytes())
+        source = 'bsp_servo.c'
+        (p / 'test.c').write_text('#include <assert.h>\n#include <stdio.h>\n#include "' + source + '"\n' + r"""
 static int budget, writes, fail_pwm, stops, tasks, seen[5], pos;
 int qm_mutex_new(qm_mutex_t*x){return 0;}
 int qm_mutex_lock(qm_mutex_t*x,int n){return 0;}
@@ -72,29 +80,32 @@ int main(void){
  puts("PASS: idle boot, init guard, full sequence, busy rejection, stop, manual override, ramp/hold faults, angle bound");
 }
 """)
- exe=p/'test.exe'
- subprocess.run([args.cc,'-std=c11','-I',str(p),str(p/'test.c'),'-o',str(exe)],check=True)
- subprocess.run([str(exe)],check=True)
+        exe = p / 'test.exe'
+        subprocess.run([cc, '-std=c11', '-I', str(p), str(p / 'test.c'), '-o', str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
 
- # Exercise the real runtime event handler independently of FreeRTOS.
- (p/'qm_errno.h').write_text('#include "qm.h"\n')
- (p/'qm_types.h').write_text('#include <stdint.h>\ntypedef int qm_bool;\n')
- (p/'qm_pomodoro.h').write_bytes((root/'sdk/qumios-dev/components/qm_pomodoro/include/qm_pomodoro.h').read_bytes())
- runtime=(root/'sdk/apps/main/lj_components/morphcube/morphcube_study_runtime.c').read_text(encoding='utf-8')
- handler=runtime[runtime.index('static void handle_pomodoro('):runtime.index('static void morphcube_study_task(')]
- (p/'event.c').write_text(r"""
+        # Exercise the real runtime event handler independently of FreeRTOS.
+        (p / 'qm_errno.h').write_text('#include "qm.h"\n')
+        (p / 'qm_types.h').write_text('#include <stdint.h>\ntypedef int qm_bool;\n')
+        (p / 'qm_pomodoro.h').write_bytes((root / 'sdk/qumios-dev/components/qm_pomodoro/include/qm_pomodoro.h').read_bytes())
+        runtime = (root / 'sdk/apps/main/lj_components/morphcube/morphcube_study_runtime.c').read_text(encoding='utf-8')
+        handler = runtime[runtime.index('static void handle_pomodoro('):runtime.index('static void morphcube_study_task(')]
+        (p / 'event.c').write_text(r"""
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include "qm.h"
 #include "qm_log.h"
 #include "qm_pomodoro.h"
 typedef int mc_study;
 static int reminders;
+static uint64_t monotonic_ms(void) { return 0; }
 void mc_study_reset(mc_study *s){}
 void mc_study_set_active(mc_study*s,bool active){}
+void mc_study_set_paused(mc_study*s,bool paused,uint64_t now_ms){}
 int bsp_servo_focus_reminder(void){reminders++;return 0;}
-"""+handler+r"""
+""" + handler + r"""
 int main(void){
  mc_study study=0;qm_pomodoro_status_t status={0};
  for(int event=QM_POMODORO_EVENT_STATE_CHANGED;event<=QM_POMODORO_EVENT_FINISHED;event++){
@@ -108,7 +119,19 @@ int main(void){
  }
  puts("PASS: 70 event/phase/skip combinations, including final FINISHED without duplicate reminder");
 }
-""",encoding='utf-8')
- exe=p/'event.exe'
- subprocess.run([args.cc,'-std=c11','-I',str(p),str(p/'event.c'),'-o',str(exe)],check=True)
- subprocess.run([str(exe)],check=True)
+""", encoding='utf-8')
+        exe = p / 'event.exe'
+        subprocess.run([cc, '-std=c11', '-I', str(p), str(p / 'event.c'), '-o', str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
+class TestServoHost(unittest.TestCase):
+    def test_servo_host(self):
+        run_all_tests('gcc')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cc', default='gcc')
+    args, unknown = parser.parse_known_args()
+    run_all_tests(args.cc)

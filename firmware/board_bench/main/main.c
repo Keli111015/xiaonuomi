@@ -28,6 +28,12 @@ static void update_clock(uint64_t now)
 {
     uint64_t dt = now - previous_ms;
     previous_ms = now;
+    if (study.paused_bleeding && mc_study_pause_tick(&study, now)) {
+        if (study.exhausted) {
+            phase = "rest_required";
+            status("exhausted");
+        }
+    }
     if (!study.active) return;
     if (dt >= remaining_ms) {
         remaining_ms = 0;
@@ -45,15 +51,16 @@ static void command(const char *line, uint64_t now)
         if (strcmp(phase, "idle")) result = "invalid_state";
         else { phase = "focus"; mc_study_set_active(&study, true); }
     } else if (!strcmp(line, "pause")) {
-        if (study.active) { phase = "paused"; mc_study_set_active(&study, false); }
+        if (study.active) { phase = "paused"; mc_study_set_paused(&study, true, now); }
         else result = "invalid_state";
     } else if (!strcmp(line, "resume")) {
         if (strcmp(phase, "paused") || study.exhausted) result = "invalid_state";
-        else { phase = "focus"; mc_study_set_active(&study, true); }
+        else { phase = "focus"; mc_study_set_paused(&study, false, now); mc_study_set_active(&study, true); }
     } else if (!strcmp(line, "distracted")) {
-        if (!mc_study_distraction(&study, true, now)) result = "ignored";
+        if (!mc_study_chat_detected(&study, now)) result = "ignored";
         if (study.exhausted) phase = "rest_required";
     } else if (!strcmp(line, "stop")) {
+        mc_study_set_paused(&study, false, now);
         mc_study_set_active(&study, false);
         phase = "stopped";
     } else if (!strcmp(line, "new")) {
