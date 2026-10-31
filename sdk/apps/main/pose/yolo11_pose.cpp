@@ -98,12 +98,18 @@ extern "C" void yolo11_pose_calibration_reset(void)
     s_baseline = {};
     s_calibration_count = 0;
 }
+extern "C" int yolo11_pose_calibration_count(void) { return s_calibration_count; }
 extern "C" int yolo11_pose_calibration_add(const yolo11_pose_frame_result_t *sample)
 {
-    if (sample == nullptr || !sample->valid) return s_calibration_count;
-    if (s_calibration_count >= 3) yolo11_pose_calibration_reset();
+    if (sample == nullptr || !sample->valid ||
+        !std::isfinite(sample->roll) || !std::isfinite(sample->shoulder_diff) ||
+        !std::isfinite(sample->lean) || !std::isfinite(sample->head_down_ratio) ||
+        !std::isfinite(sample->eye_w_ratio) || sample->eye_w_ratio <= 0.0f)
+        return s_calibration_count;
+    if (s_calibration_count >= 3) return s_calibration_count;
     if (s_calibration_count &&
-        (fabsf(sample->roll - s_baseline.roll) > 0.12f ||
+        (fabsf(sample->lean - s_baseline.lean) > 0.12f ||
+         fabsf(sample->roll - s_baseline.roll) > 0.12f ||
          fabsf(sample->shoulder_diff - s_baseline.shoulder_diff) > 0.12f ||
          fabsf(sample->head_down_ratio - s_baseline.head_down_ratio) > 0.18f ||
          fabsf(sample->eye_w_ratio / s_baseline.eye_w_ratio - 1.0f) > 0.20f)) {
@@ -163,10 +169,8 @@ static void analyze_pose_result(const dl::detect::result_t &res,
             ESP_LOGI(TAG, "auto-calibration sample accepted: %d/3", cnt);
         }
         if (!out->calibrated) {
-            out->err_type = pick_primary_pose_err(false, abs_tilt, abs_close, abs_down);
-            out->status = (out->err_type == YOLO11_POSE_ERR_NONE)
-                              ? YOLO11_POSE_FRAME_OK
-                              : YOLO11_POSE_FRAME_BAD_POSTURE;
+            /* Calibration candidates are measurements, not posture verdicts. */
+            out->status = YOLO11_POSE_FRAME_UNKNOWN;
             return;
         }
     }
@@ -501,6 +505,11 @@ static esp_err_t analyze_rgb888_img(const dl::image::img_t &img,
         return ESP_OK;
     }
 
+    /* A different person must not silently replace the calibration subject. */
+    if (pose_results.size() != 1) {
+        if (out != nullptr) { *out = {}; out->status = YOLO11_POSE_FRAME_UNKNOWN; }
+        return ESP_OK;
+    }
     const auto &res = pose_results.front();
     ESP_LOGI(TAG,
              "%s [score: %f, x1: %d, y1: %d, x2: %d, y2: %d]",
@@ -842,6 +851,11 @@ extern "C" esp_err_t yolo11_pose_analyze_jpg_named(const uint8_t *jpg_data,
         return ESP_OK;              /* img.data 是常驻缓冲，不能释放 */
     }
 
+    /* A different person must not silently replace the calibration subject. */
+    if (pose_results.size() != 1) {
+        if (out != nullptr) { *out = {}; out->status = YOLO11_POSE_FRAME_UNKNOWN; }
+        return ESP_OK;
+    }
     const auto &res = pose_results.front();
     ESP_LOGI(TAG,
              "%s [score: %f, x1: %d, y1: %d, x2: %d, y2: %d]",

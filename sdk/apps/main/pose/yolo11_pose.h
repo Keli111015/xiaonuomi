@@ -39,6 +39,7 @@ typedef struct {
 
 esp_err_t yolo11_pose_init(void);
 void yolo11_pose_calibration_reset(void);
+int yolo11_pose_calibration_count(void);
 int yolo11_pose_calibration_add(const yolo11_pose_frame_result_t *sample);
 
 /** 启动早期预分配姿态链路常驻缓冲（解码/旋转/原生RGB），避免运行时抢连续 PSRAM。 */

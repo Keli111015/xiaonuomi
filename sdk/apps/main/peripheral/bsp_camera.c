@@ -182,14 +182,12 @@ static void cam_pose_task(void *arg)
                 }
             }
         }
+        if (s_pose_calibrate) yolo11_pose_calibration_reset();
         if (ret == ESP_OK) {
             ret = yolo11_pose_analyze_rgb888(rgb, w, h, "camera", &result);
         }
-        int calibration_count = -1;
-        if (s_pose_calibrate && ret == ESP_OK) {
-            calibration_count = yolo11_pose_calibration_add(&result);
-            result.calibrated = (calibration_count >= 3);
-        }
+        /* cam calibrate restarts collection; each frame is counted only once. */
+        int calibration_count = yolo11_pose_calibration_count();
         ESP_LOGI(LOG_TAG,
                  "POSE_RESULT ret=%s status=%d err=%d elapsed_ms=%u rotate=%d size=%ux%u valid=%d calibrated=%d cal_count=%d",
                  esp_err_to_name(ret), (int)result.status, (int)result.err_type,
@@ -198,7 +196,7 @@ static void cam_pose_task(void *arg)
 
 #if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
         morphcube_pose_t pose_to_report = MORPHCUBE_POSE_UNKNOWN;
-        if (ret == ESP_OK && result.valid) {
+        if (ret == ESP_OK && result.valid && result.calibrated) {
             if (result.status == YOLO11_POSE_FRAME_OK) {
                 pose_to_report = MORPHCUBE_POSE_NORMAL;
             } else if (result.status == YOLO11_POSE_FRAME_BAD_POSTURE) {
