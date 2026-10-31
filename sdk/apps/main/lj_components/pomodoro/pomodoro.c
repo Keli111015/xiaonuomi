@@ -18,6 +18,27 @@
 
 static qm_pomodoro_t g_pomodoro;
 
+#if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
+static void pomodoro_sync_camera_stream(const qm_pomodoro_status_t *status)
+{
+    if (status == NULL || !bsp_camera_is_available())
+    {
+        return;
+    }
+    if (status->state == QM_POMODORO_STATE_FOCUS && !status->paused)
+    {
+        QM_LOGI(LOG_TAG, "focus active: start continuous camera stream");
+        (void)bsp_camera_stream_start();
+    }
+    else
+    {
+        QM_LOGI(LOG_TAG, "focus inactive (state=%d paused=%d): stop camera stream",
+                (int)status->state, (int)status->paused);
+        (void)bsp_camera_stream_stop();
+    }
+}
+#endif
+
 static void on_pomodoro_event(qm_pomodoro_t t, const qm_pomodoro_event_data_t *e)
 {
     (void)t;
@@ -37,11 +58,14 @@ static void on_pomodoro_event(qm_pomodoro_t t, const qm_pomodoro_event_data_t *e
         /* Remaining time was updated. */
         QM_LOGI(LOG_TAG, "remain=%us", (unsigned)e->status.remaining_sec);
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST && defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
-        /* 专注阶段每 10 秒触发一次坐姿单次抓拍检测 */
-        if (e->status.state == QM_POMODORO_STATE_FOCUS && !e->status.paused) {
-            if (e->status.elapsed_sec > 0 && (e->status.elapsed_sec % 10 == 0)) {
-                if (bsp_camera_is_available() && !agent_app_is_dialog_busy()) {
-                    QM_LOGI(LOG_TAG, "focus 10s tick: trigger posture check (elapsed=%us)",
+        /* 专注阶段视频流常开，每 2 秒触发一次坐姿检测 */
+        if (e->status.state == QM_POMODORO_STATE_FOCUS && !e->status.paused)
+        {
+            if (e->status.elapsed_sec > 0 && (e->status.elapsed_sec % 2 == 0))
+            {
+                if (bsp_camera_is_available() && !agent_app_is_dialog_busy())
+                {
+                    QM_LOGI(LOG_TAG, "focus 2s tick: trigger posture check (elapsed=%us)",
                             (unsigned)e->status.elapsed_sec);
                     (void)bsp_camera_pose_request(90, false);
                 }
@@ -50,22 +74,22 @@ static void on_pomodoro_event(qm_pomodoro_t t, const qm_pomodoro_event_data_t *e
 #endif
         break;
     case QM_POMODORO_EVENT_STATE_CHANGED:
-        /* Phase changed. */
+    case QM_POMODORO_EVENT_PAUSED:
+    case QM_POMODORO_EVENT_RESUMED:
+    case QM_POMODORO_EVENT_STOPPED:
+    case QM_POMODORO_EVENT_FINISHED:
+#if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
+        pomodoro_sync_camera_stream(&e->status);
+#endif
         break;
     case QM_POMODORO_EVENT_PHASE_DONE:
-        /* Current focus or break phase completed. */
-        break;
-    case QM_POMODORO_EVENT_PAUSED:
-        /* Timer was paused. */
-        break;
-    case QM_POMODORO_EVENT_RESUMED:
-        /* Timer resumed from pause. */
-        break;
-    case QM_POMODORO_EVENT_STOPPED:
-        /* Timer was stopped and reset to idle. */
-        break;
-    case QM_POMODORO_EVENT_FINISHED:
-        /* Target focus count completed. */
+#if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
+        if (e->previous_state == QM_POMODORO_STATE_FOCUS)
+        {
+            QM_LOGI(LOG_TAG, "focus phase done: stop camera stream");
+            (void)bsp_camera_stream_stop();
+        }
+#endif
         break;
     default:
         /* Unknown event. */

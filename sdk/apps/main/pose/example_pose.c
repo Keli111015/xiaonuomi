@@ -21,6 +21,7 @@ void example_pose_run(void)
     }
 
     ret = yolo11_pose_analyze_jpg_named(pose_bus_jpg_start, len, "bus.jpg", &result);
+    yolo11_pose_release_decode_buf();
     if (ret != ESP_OK) {
         QM_LOGE(LOG_TAG, "pose bus jpg failed");
         return;

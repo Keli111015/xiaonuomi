@@ -123,12 +123,11 @@ static esp_err_t snapshot_request(void)
     }
     cam_enter_vision_window();
     if (!s_cam.stream_on) {
-        s_oneshot_stream = true;
         if (bsp_camera_stream_start() != ESP_OK) {
-            s_oneshot_stream = false;
             cam_exit_vision_window();
             return ESP_FAIL;
         }
+        s_oneshot_stream = true;
     }
     s_snapshot_busy=true;
     s_snapshot_requested_at=xTaskGetTickCount();
@@ -187,6 +186,7 @@ static void cam_pose_task(void *arg)
         int calibration_count = -1;
         if (s_pose_calibrate && ret == ESP_OK) {
             calibration_count = yolo11_pose_calibration_add(&result);
+            result.calibrated = (calibration_count >= 3);
         }
         ESP_LOGI(LOG_TAG,
                  "POSE_RESULT ret=%s status=%d err=%d elapsed_ms=%u rotate=%d size=%ux%u valid=%d calibrated=%d cal_count=%d",
@@ -230,7 +230,7 @@ esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
                                      MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (s_pose_raw == NULL) return ESP_ERR_NO_MEM;
         if (xTaskCreatePinnedToCoreWithCaps(cam_pose_task, "cam_pose", 8192,
-                NULL, 2, &s_pose_task, 0, CAM_STACK_CAPS) != pdPASS) {
+                NULL, 5, &s_pose_task, 1, CAM_STACK_CAPS) != pdPASS) {
             heap_caps_free(s_pose_raw);
             s_pose_raw = NULL;
             s_pose_task = NULL;
@@ -246,12 +246,11 @@ esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
 
     cam_enter_vision_window();
     if (!s_cam.stream_on) {
-        s_oneshot_stream = true;
         if (bsp_camera_stream_start() != ESP_OK) {
-            s_oneshot_stream = false;
             cam_exit_vision_window();
             return ESP_FAIL;
         }
+        s_oneshot_stream = true;
     }
 
     portENTER_CRITICAL(&s_pose_mux);
@@ -455,6 +454,25 @@ static esp_err_t cam_stream_off(void)
     s_buffers_queued = false;
     s_stream_stop_req = false;
     s_oneshot_stream = false;
+
+#if CONFIG_QM_POSE_SUPPORT
+    bool abort_pending_pose = false;
+    portENTER_CRITICAL(&s_pose_mux);
+    if (s_pose_state == 1) {
+        s_pose_state = 0;
+        abort_pending_pose = true;
+    }
+    portEXIT_CRITICAL(&s_pose_mux);
+    if (abort_pending_pose) {
+        cam_exit_vision_window();
+    }
+#endif
+    if (s_snap) {
+        s_snap = false;
+        s_snapshot_busy = false;
+        cam_exit_vision_window();
+    }
+
     ESP_LOGI(LOG_TAG, "stream off, %s", ESP_VIDEO_SPI_DEVICE_NAME);
     return ESP_OK;
 }
@@ -475,7 +493,7 @@ static void cam_snapshot_dump(const uint8_t *frame)
         .height = (int)s_cam.height,
         .src_type = JPEG_PIXEL_FORMAT_CbYCrY,   /* UYVY == camera fourcc */
         .subsampling = JPEG_SUBSAMPLE_422,
-        .quality = 65,
+        .quality = 45,
         .rotate = JPEG_ROTATE_0D,
         .task_enable = false,
     };
@@ -527,7 +545,9 @@ static void cam_snapshot_dump(const uint8_t *frame)
         encoded[k]=0;
         len=snprintf(line,sizeof(line),"\r\nJPG2_DATA %u %u %s\r\n",id,(unsigned)off,encoded);
         qm_dbg_write(line,len,QM_WAIT_FOREVER);
-        vTaskDelay(1);
+        if (((off / 96) & 7) == 7) {
+            vTaskDelay(1);
+        }
     }
     len=snprintf(line,sizeof(line),"\r\nJPG2_END %u\r\n",id);
     qm_dbg_write(line,len,QM_WAIT_FOREVER);
@@ -703,6 +723,7 @@ esp_err_t bsp_camera_stream_start(void)
         ESP_LOGE(LOG_TAG, "stream_start before early_init");
         return ESP_ERR_INVALID_STATE;
     }
+    s_oneshot_stream = false;
     if (cam_stream_on() != ESP_OK) {
         return ESP_FAIL;
     }
