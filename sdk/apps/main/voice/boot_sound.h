@@ -13,6 +13,11 @@ extern "C" {
  */
 qm_err_t boot_sound_start(void);
 
+/*
+ * 播放一次扣血音效。异步：由本地音效任务编码+播放，调用完立即返回。
+ */
+qm_err_t hurt_sound_start(void);
+
 #ifdef __cplusplus
 }
 #endif

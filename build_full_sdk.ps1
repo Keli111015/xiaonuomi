@@ -4,10 +4,10 @@ $ErrorActionPreference = 'Stop'
 $sdkRoot = Join-Path $PSScriptRoot 'sdk'
 $localConfig = Join-Path $sdkRoot 'apps\main\cloud\ljyd_cloud_local.h'
 if (-not (Test-Path -LiteralPath $localConfig)) {
-    throw '先把 sdk/apps/main/cloud/ljyd_cloud_local.example.h 复制为 ljyd_cloud_local.h，填写自己的PID和产品密钥。'
+    throw 'first replace sdk/apps/main/cloud/ljyd_cloud_local.example.h to ljyd_cloud_local.h , and fill in your PID and key'
 }
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    throw '请先安装SDK工具链并在当前PowerShell导出ESP-IDF环境。'
+    throw 'please install sdk and perform export'
 }
 $env:ADF_PATH = $sdkRoot
 $env:IDF_PATH = Join-Path $sdkRoot 'esp-idf'

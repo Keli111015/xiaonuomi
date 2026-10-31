@@ -310,6 +310,8 @@ register_component()
 
 # 开机音效 PCM（16k/单声道/16bit）嵌进固件，生成 _binary_boot_sound_pcm_start/_end
 target_add_binary_data(${COMPONENT_LIB} "voice/boot_sound.pcm" BINARY RENAME_TO boot_sound_pcm)
+# 扣血音效 PCM（16k/单声道/16bit）嵌进固件，生成 _binary_hurt_sound_pcm_start/_end
+target_add_binary_data(${COMPONENT_LIB} "voice/hurt_sound.pcm" BINARY RENAME_TO hurt_sound_pcm)
 
 if(VOICE_BACKEND_AGORA)
     target_link_libraries(${COMPONENT_LIB} PUBLIC

@@ -1,5 +1,6 @@
 #include "morphcube_study_runtime.h"
 
+#include "boot_sound.h"
 #include "mc_study.h"
 #include "bsp_servo.h"
 #include "qm.h"
@@ -125,6 +126,7 @@ static void morphcube_study_task(void *arg)
             if (changed) {
                 QM_LOGI(LOG_TAG, "distraction accepted hp=%u penalties=%u",
                         (unsigned)study.hp, (unsigned)study.penalties);
+                (void)hurt_sound_start();
                 if (study.exhausted) {
                     int ret = qm_pomodoro_pause(s_timer);
                     if (ret != QM_EOK) {

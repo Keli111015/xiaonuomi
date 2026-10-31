@@ -38,28 +38,54 @@
 #define BS_WRITE_MS         (1000)
 #define BS_DRAIN_MS         (3000)
 
-/* target_add_binary_data(... RENAME_TO boot_sound_pcm) 生成的符号 */
+/* target_add_binary_data(... RENAME_TO boot_sound_pcm / hurt_sound_pcm) 生成的符号 */
 extern const uint8_t boot_sound_pcm_start[] asm("_binary_boot_sound_pcm_start");
 extern const uint8_t boot_sound_pcm_end[] asm("_binary_boot_sound_pcm_end");
+extern const uint8_t hurt_sound_pcm_start[] asm("_binary_hurt_sound_pcm_start");
+extern const uint8_t hurt_sound_pcm_end[] asm("_binary_hurt_sound_pcm_end");
+
+typedef enum {
+    LOCAL_SOUND_BOOT = 0,
+    LOCAL_SOUND_HURT = 1,
+    LOCAL_SOUND_COUNT
+} local_sound_id_t;
+
+typedef struct {
+    const char *name;
+    const uint8_t *pcm_start;
+    const uint8_t *pcm_end;
+    uint8_t *opus;
+    uint32_t *opus_off;     /* frames + 1 个，末元素是总字节数 */
+    uint16_t opus_frames;
+} local_sound_cache_t;
+
+static local_sound_cache_t s_sounds[LOCAL_SOUND_COUNT] = {
+    [LOCAL_SOUND_BOOT] = {
+        .name = "boot",
+        .pcm_start = boot_sound_pcm_start,
+        .pcm_end = boot_sound_pcm_end,
+    },
+    [LOCAL_SOUND_HURT] = {
+        .name = "hurt",
+        .pcm_start = hurt_sound_pcm_start,
+        .pcm_end = hurt_sound_pcm_end,
+    },
+};
 
 static StaticTask_t s_tcb;
 static StaticSemaphore_t s_sem_buf;
 static SemaphoreHandle_t s_sem;
 static uint8_t s_task_up;
-
-/* 整段 Opus + 每帧偏移表。播放按包写，不拼成一条字节流。 */
-static uint8_t *s_opus;
-static uint32_t *s_opus_off;    /* frames + 1 个，末元素是总字节数 */
-static uint16_t s_opus_frames;
+static volatile local_sound_id_t s_req_sound = LOCAL_SOUND_BOOT;
 
 static void boot_sound_task(void *arg);
 
-/* 整段 PCM → Opus，只构建一次 */
-static int boot_sound_build_opus(void)
+/* 整段 PCM → Opus，每个音效只构建一次 */
+static int boot_sound_build_opus(local_sound_cache_t *snd)
 {
     static int16_t frame[BS_FRAME_SAMP];
-    const uint8_t *pcm = boot_sound_pcm_start;
-    uint32_t total = (uint32_t)(boot_sound_pcm_end - boot_sound_pcm_start);
+    const uint8_t *pcm = snd->pcm_start;
+    uint32_t total = (uint32_t)(snd->pcm_end - snd->pcm_start);
     uint32_t frames = total / BS_FRAME_BYTES;
     OpusEncoder *enc;
     uint32_t pcm_off = 0;
@@ -67,21 +93,21 @@ static int boot_sound_build_opus(void)
     uint16_t i;
     int err = 0;
 
-    if (s_opus != NULL) {
+    if (snd->opus != NULL) {
         return QM_EOK;
     }
     if (frames == 0U || frames > BS_FRAME_MAX_NUM) {
-        QM_LOGW(LOG_TAG, "pcm=%u bytes frames=%u out of range",
-                (unsigned)total, (unsigned)frames);
+        QM_LOGW(LOG_TAG, "%s pcm=%u bytes frames=%u out of range",
+                snd->name, (unsigned)total, (unsigned)frames);
         return -QM_EINVAL;
     }
 
-    s_opus = (uint8_t *)heap_caps_malloc(frames * BS_OPUS_MAX,
-                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    s_opus_off = (uint32_t *)heap_caps_malloc((frames + 1U) * sizeof(uint32_t),
-                                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (s_opus == NULL || s_opus_off == NULL) {
-        QM_LOGW(LOG_TAG, "opus cache alloc failed");
+    snd->opus = (uint8_t *)heap_caps_malloc(frames * BS_OPUS_MAX,
+                                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    snd->opus_off = (uint32_t *)heap_caps_malloc((frames + 1U) * sizeof(uint32_t),
+                                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (snd->opus == NULL || snd->opus_off == NULL) {
+        QM_LOGW(LOG_TAG, "%s opus cache alloc failed", snd->name);
         goto fail;
     }
 
@@ -96,34 +122,34 @@ static int boot_sound_build_opus(void)
 
         /* 嵌进 flash 的数据不保证 2 字节对齐，先拷到对齐缓冲 */
         memcpy(frame, pcm + pcm_off, BS_FRAME_BYTES);
-        n = opus_encode(enc, frame, BS_FRAME_SAMP, s_opus + opus_off, BS_OPUS_MAX);
+        n = opus_encode(enc, frame, BS_FRAME_SAMP, snd->opus + opus_off, BS_OPUS_MAX);
         if (n <= 0) {
             QM_LOGW(LOG_TAG, "encode failed n=%d frame=%u", n, (unsigned)i);
             opus_encoder_destroy(enc);
             goto fail;
         }
-        s_opus_off[i] = opus_off;
+        snd->opus_off[i] = opus_off;
         opus_off += (uint32_t)n;
         pcm_off += BS_FRAME_BYTES;
     }
     opus_encoder_destroy(enc);
 
-    s_opus_off[frames] = opus_off;
-    s_opus_frames = (uint16_t)frames;
-    QM_LOGI(LOG_TAG, "encoded %u frames / %u bytes opus", (unsigned)frames,
-            (unsigned)opus_off);
+    snd->opus_off[frames] = opus_off;
+    snd->opus_frames = (uint16_t)frames;
+    QM_LOGI(LOG_TAG, "%s encoded %u frames / %u bytes opus", snd->name,
+            (unsigned)frames, (unsigned)opus_off);
     return QM_EOK;
 
 fail:
-    heap_caps_free(s_opus);
-    heap_caps_free(s_opus_off);
-    s_opus = NULL;
-    s_opus_off = NULL;
+    heap_caps_free(snd->opus);
+    heap_caps_free(snd->opus_off);
+    snd->opus = NULL;
+    snd->opus_off = NULL;
     return -QM_ERROR;
 }
 
 /* 自己的 Control，按包写已编好的 Opus。不占用 agent 那份 Control。 */
-static void boot_sound_play_local(void)
+static void boot_sound_play_local(const local_sound_cache_t *snd)
 {
     qm_audio_control_t *control = NULL;
     qm_audio_control_play_request_t req;
@@ -170,13 +196,13 @@ static void boot_sound_play_local(void)
         return;
     }
 
-    for (i = 0U; i < s_opus_frames; i++) {
+    for (i = 0U; i < snd->opus_frames; i++) {
         qm_audio_data_t packet;
-        uint32_t off = s_opus_off[i];
-        uint32_t len = s_opus_off[i + 1U] - off;
+        uint32_t off = snd->opus_off[i];
+        uint32_t len = snd->opus_off[i + 1U] - off;
 
         memset(&packet, 0, sizeof(packet));
-        packet.data = s_opus + off;
+        packet.data = snd->opus + off;
         packet.size = len;
         packet.duration_ms = 20;
         packet.flags = QM_AUDIO_DATA_DURATION_VALID;
@@ -193,18 +219,24 @@ static void boot_sound_play_local(void)
     if (ret == QM_EOK) {
         ret = qm_audio_control_wait(control, operation, BS_DRAIN_MS);
     }
-    QM_LOGI(LOG_TAG, "local play done ret=%d frames=%u/%u",
-            ret, (unsigned)i, (unsigned)s_opus_frames);
+    QM_LOGI(LOG_TAG, "%s local play done ret=%d frames=%u/%u",
+            snd->name, ret, (unsigned)i, (unsigned)snd->opus_frames);
     (void)qm_audio_control_release(control, operation, 1000);
     (void)qm_audio_control_shutdown(control, 1000);
     (void)qm_audio_control_destroy(control);
 }
 
 /* 播一遍；编不出来就直接放弃，不再去抢通路 */
-static void boot_sound_play_once(void)
+static void boot_sound_play_once(local_sound_id_t id)
 {
-    if (boot_sound_build_opus() != QM_EOK) {
-        QM_LOGW(LOG_TAG, "no opus cache, skip");
+    local_sound_cache_t *snd;
+
+    if (id < 0 || id >= LOCAL_SOUND_COUNT) {
+        return;
+    }
+    snd = &s_sounds[id];
+    if (boot_sound_build_opus(snd) != QM_EOK) {
+        QM_LOGW(LOG_TAG, "%s no opus cache, skip", snd->name);
         return;
     }
 
@@ -214,8 +246,9 @@ static void boot_sound_play_once(void)
         (void)agent_app_set_resource_mode(QM_FALSE);
     }
 
-    QM_LOGI(LOG_TAG, "play %u ms local", (unsigned)((uint32_t)s_opus_frames * 20U));
-    boot_sound_play_local();
+    QM_LOGI(LOG_TAG, "play %s (%u ms local)", snd->name,
+            (unsigned)((uint32_t)snd->opus_frames * 20U));
+    boot_sound_play_local(snd);
 }
 
 /* 常驻任务：等信号量 → 播一遍；任务不退出，避免反复建/删任务的资源风险 */
@@ -227,11 +260,11 @@ static void boot_sound_task(void *arg)
         if (xSemaphoreTake(s_sem, portMAX_DELAY) != pdTRUE) {
             continue;
         }
-        boot_sound_play_once();
+        boot_sound_play_once(s_req_sound);
     }
 }
 
-qm_err_t boot_sound_start(void)
+static qm_err_t local_sound_request(local_sound_id_t id)
 {
     static StackType_t *stack;
 
@@ -258,9 +291,20 @@ qm_err_t boot_sound_start(void)
         s_task_up = 1;
     }
 
+    s_req_sound = id;
     /* 正在播时 give 失败（二值信号量已满）= 忽略本次请求，不打断未播完的 */
     if (xSemaphoreGive(s_sem) != pdTRUE) {
         QM_LOGD(LOG_TAG, "busy, request merged");
     }
     return QM_EOK;
+}
+
+qm_err_t boot_sound_start(void)
+{
+    return local_sound_request(LOCAL_SOUND_BOOT);
+}
+
+qm_err_t hurt_sound_start(void)
+{
+    return local_sound_request(LOCAL_SOUND_HURT);
 }
