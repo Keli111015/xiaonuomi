@@ -29,10 +29,9 @@ static IRAM_ATTR bool cb_ledc_fade_end_event(const ledc_cb_param_t *param, void 
  */
 int32_t qm_pwm_init(qm_pwm_dev_t *pwm)
 {
-    qm_err_t ret = QM_EOK;
     qm_pwm_info_t *info = NULL;
 
-    if(pwm->port < 0 || pwm->port > 3){
+    if(pwm == NULL || pwm->port > 3){
         return -QM_EINVAL;
     }
     
@@ -74,12 +73,11 @@ int32_t qm_pwm_init(qm_pwm_dev_t *pwm)
             info->ledc_channel.timer_sel = LEDC_TIMER_3;
             break;
         default:
-            ret = -QM_ERROR;
-        break;
+            return -QM_EINVAL;
     }
 
-    ledc_timer_config(&info->ledc_timer);
-    ledc_channel_config(&info->ledc_channel);
+    if (ledc_timer_config(&info->ledc_timer) != ESP_OK) return -QM_EIO;
+    if (ledc_channel_config(&info->ledc_channel) != ESP_OK) return -QM_EIO;
     
     if(ledc_fade_flag == 1)
     {
@@ -90,7 +88,8 @@ int32_t qm_pwm_init(qm_pwm_dev_t *pwm)
  
     pwm->priv = (void *)&pwm_info[pwm->port];
 
-    ledc_set_duty(info->ledc_channel.speed_mode, info->ledc_channel.channel, pwm->config.pulse);
+    if (ledc_set_duty(info->ledc_channel.speed_mode, info->ledc_channel.channel,
+                      pwm->config.pulse) != ESP_OK) return -QM_EIO;
 
     return QM_EOK;
 }
@@ -100,14 +99,15 @@ int32_t qm_pwm_init(qm_pwm_dev_t *pwm)
 int32_t qm_pwm_start(qm_pwm_dev_t *pwm)
 {
     ledc_channel_config_t *ledc_channel = NULL;
-    qm_pwm_info_t *info = (qm_pwm_info_t *)pwm->priv;
+    qm_pwm_info_t *info = pwm ? (qm_pwm_info_t *)pwm->priv : NULL;
 
     if(pwm == NULL || pwm->priv == NULL){
         return -QM_EINVAL;
     }
     ledc_channel = &info->ledc_channel;
 
-    ledc_update_duty(ledc_channel->speed_mode, ledc_channel->channel);
+    if (ledc_update_duty(ledc_channel->speed_mode, ledc_channel->channel) != ESP_OK)
+        return -QM_EIO;
 
     return QM_EOK;
 }
@@ -115,13 +115,14 @@ int32_t qm_pwm_start(qm_pwm_dev_t *pwm)
 int32_t qm_pwm_stop(qm_pwm_dev_t *pwm)
 {
     ledc_channel_config_t *ledc_channel = NULL;
-    qm_pwm_info_t *info = (qm_pwm_info_t *)pwm->priv;
+    qm_pwm_info_t *info = pwm ? (qm_pwm_info_t *)pwm->priv : NULL;
     if(pwm == NULL || pwm->priv == NULL){
         return -QM_EINVAL;
     }
     ledc_channel = &info->ledc_channel;
 
-    ledc_stop(ledc_channel->speed_mode, ledc_channel->channel, 0);
+    if (ledc_stop(ledc_channel->speed_mode, ledc_channel->channel, 0) != ESP_OK)
+        return -QM_EIO;
 
     return QM_EOK;
 }
@@ -129,7 +130,7 @@ int32_t qm_pwm_stop(qm_pwm_dev_t *pwm)
 int32_t qm_pwm_para_change(qm_pwm_dev_t *pwm, qm_pwm_config_t para)
 {
     ledc_channel_config_t *ledc_channel = NULL;
-    qm_pwm_info_t *info = (qm_pwm_info_t *)pwm->priv;
+    qm_pwm_info_t *info = pwm ? (qm_pwm_info_t *)pwm->priv : NULL;
 
     if(pwm == NULL || pwm->priv == NULL){
         return -QM_EINVAL;
@@ -142,8 +143,10 @@ int32_t qm_pwm_para_change(qm_pwm_dev_t *pwm, qm_pwm_config_t para)
     }
 #endif
 
-    ledc_set_duty(ledc_channel->speed_mode, ledc_channel->channel, para.pulse);
-    ledc_update_duty(ledc_channel->speed_mode, ledc_channel->channel);
+    if (ledc_set_duty(ledc_channel->speed_mode, ledc_channel->channel, para.pulse) != ESP_OK)
+        return -QM_EIO;
+    if (ledc_update_duty(ledc_channel->speed_mode, ledc_channel->channel) != ESP_OK)
+        return -QM_EIO;
 
     return QM_EOK;
 }

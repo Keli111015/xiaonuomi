@@ -189,6 +189,7 @@ static void qm_pomodoro_append_event_locked(qm_pomodoro_t pomodoro,
     }
 
     item = &events[*event_count];
+    item->phase_skipped = QM_FALSE;
     item->event = event;
     item->previous_state = previous_state;
     item->user_ctx = pomodoro->config.user_ctx;
@@ -620,6 +621,9 @@ int qm_pomodoro_skip(qm_pomodoro_t pomodoro)
 
     qm_pomodoro_complete_phase_locked(pomodoro, events, &event_count,
                                       &stop_timer);
+    for (int i = 0; i < event_count; ++i) {
+        events[i].phase_skipped = QM_TRUE;
+    }
     if (stop_timer) {
         (void)qm_timer_stop(&pomodoro->timer);
     }

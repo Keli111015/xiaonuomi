@@ -29,6 +29,8 @@ extern "C" {
 
 qm_err_t bsp_servo_init(void);
 int bsp_servo_cli_init(void);
+/* Nonblocking focus reminder; repeated requests while active return EBUSY. */
+qm_err_t bsp_servo_focus_reminder(void);
 void bsp_servo_deinit(void);
 
 void bsp_servo_set_pulse_us(uint16_t pulse_us);

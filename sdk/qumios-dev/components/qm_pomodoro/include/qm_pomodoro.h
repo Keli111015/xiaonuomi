@@ -62,6 +62,7 @@ typedef struct {
     qm_pomodoro_event_t event;           /**< Event type. */
     qm_pomodoro_state_t previous_state;  /**< Previous phase for state changes, or current phase for other events. */
     qm_pomodoro_status_t status;         /**< Status snapshot after the event. */
+    qm_bool phase_skipped;               /**< Completion was requested by skip, not timeout. */
     void *user_ctx;                      /**< User context from qm_pomodoro_config_t. */
 } qm_pomodoro_event_data_t;
 

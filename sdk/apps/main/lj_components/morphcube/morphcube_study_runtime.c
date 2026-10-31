@@ -1,6 +1,7 @@
 #include "morphcube_study_runtime.h"
 
 #include "mc_study.h"
+#include "bsp_servo.h"
 #include "qm.h"
 #include "qm_errno.h"
 
@@ -90,8 +91,14 @@ static void handle_pomodoro(mc_study *study,
     case QM_POMODORO_EVENT_FINISHED:
         mc_study_set_active(study, false);
         break;
-    case QM_POMODORO_EVENT_TICK:
     case QM_POMODORO_EVENT_PHASE_DONE:
+        if (event->previous_state == QM_POMODORO_STATE_FOCUS &&
+            !event->phase_skipped) {
+            int ret = bsp_servo_focus_reminder();
+            if (ret != QM_EOK) QM_LOGW(LOG_TAG, "focus reminder rejected ret=%d", ret);
+        }
+        break;
+    case QM_POMODORO_EVENT_TICK:
     default:
         break;
     }

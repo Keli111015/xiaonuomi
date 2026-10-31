@@ -25,6 +25,7 @@ static qm_pwm_dev_t s_pwm = {
 };
 
 static uint8_t s_inited;
+static unsigned s_init_busy;
 static uint8_t s_move_run;
 static uint16_t s_pulse_us;
 static int16_t s_target_angle;
@@ -32,6 +33,9 @@ static qm_mutex_t s_lock;
 static uint8_t s_lock_ready;
 static qm_task_t s_move_task;
 static unsigned s_output_ticks;
+static unsigned s_reminder_step;
+static unsigned s_reminder_ticks;
+static const int16_t s_reminder_angles[] = {80, 100, 80, 100, 90};
 static int s_face_angle = 90; /* Session-only, commanded angle, no feedback. */
 
 static uint16_t servo_clamp_pulse(uint16_t pulse_us)
@@ -119,6 +123,13 @@ static void servo_move_task(void *arg)
         uint16_t next_pulse;
 
         qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+        if (s_reminder_ticks && --s_reminder_ticks == 0) {
+            if (++s_reminder_step < sizeof(s_reminder_angles) / sizeof(s_reminder_angles[0])) {
+                s_target_angle = s_reminder_angles[s_reminder_step];
+                s_reminder_ticks = 13; /* 520ms per target, including ramp. */
+                s_output_ticks = 38;
+            }
+        }
         if (!s_output_ticks) {
             qm_mutex_unlock(&s_lock);
             qm_msleep(BSP_SERVO_MOVE_STEP_MS);
@@ -135,7 +146,11 @@ static void servo_move_task(void *arg)
         current_pulse = s_pulse_us;
 
         if (current_pulse == target_pulse) {
-            (void)servo_apply_pulse(current_pulse);
+            if (servo_apply_pulse(current_pulse) != 0) {
+                s_reminder_ticks = 0;
+                s_output_ticks = 0;
+                (void)qm_pwm_stop(&s_pwm);
+            }
             qm_mutex_unlock(&s_lock);
             qm_msleep(BSP_SERVO_MOVE_STEP_MS);
             continue;
@@ -155,7 +170,11 @@ static void servo_move_task(void *arg)
             }
         }
 
-        (void)servo_apply_pulse(next_pulse);
+        if (servo_apply_pulse(next_pulse) != 0) {
+            s_reminder_ticks = 0;
+            s_output_ticks = 0;
+            (void)qm_pwm_stop(&s_pwm);
+        }
         qm_mutex_unlock(&s_lock);
         qm_msleep(BSP_SERVO_MOVE_STEP_MS);
     }
@@ -163,7 +182,7 @@ static void servo_move_task(void *arg)
     qm_task_exit(NULL);
 }
 
-qm_err_t bsp_servo_init(void)
+static qm_err_t servo_init_once(void)
 {
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST && \
     (BSP_SERVO_PWM_PIN == BSP_CAM_CS_GPIO || \
@@ -219,6 +238,37 @@ qm_err_t bsp_servo_init(void)
     return QM_EOK;
 }
 
+qm_err_t bsp_servo_init(void)
+{
+    /* Serialize first initialization across CLI and study worker. Never spin. */
+    unsigned expected = 0;
+    if (!__atomic_compare_exchange_n(&s_init_busy, &expected, 1, 0,
+                                      __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+        return -QM_EBUSY;
+    }
+    qm_err_t ret = servo_init_once();
+    __atomic_store_n(&s_init_busy, 0, __ATOMIC_RELEASE);
+    return ret;
+}
+
+qm_err_t bsp_servo_focus_reminder(void)
+{
+    qm_err_t ret = bsp_servo_init();
+    if (ret != QM_EOK) return ret;
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    if (s_reminder_ticks || s_output_ticks) {
+        qm_mutex_unlock(&s_lock);
+        return -QM_EBUSY;
+    }
+    s_reminder_step = 0;
+    s_reminder_ticks = 13;
+    s_target_angle = s_reminder_angles[0];
+    s_output_ticks = 38;
+    qm_mutex_unlock(&s_lock);
+    QM_LOGI(LOG_TAG, "focus reminder queued; no position feedback");
+    return QM_EOK;
+}
+
 void bsp_servo_deinit(void)
 {
     if (!s_inited) {
@@ -227,6 +277,7 @@ void bsp_servo_deinit(void)
 
     /* Keep one worker allocated for repeated commands; release PWM only. */
     qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    s_reminder_ticks = 0;
     s_output_ticks = 0;
     (void)qm_pwm_stop(&s_pwm);
     qm_mutex_unlock(&s_lock);
@@ -244,7 +295,13 @@ void bsp_servo_set_pulse_us(uint16_t pulse_us)
     }
 
     qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
-    (void)servo_apply_pulse(pulse_us);
+    s_reminder_ticks = 0;
+    if (servo_apply_pulse(pulse_us) != 0) {
+        s_output_ticks = 0;
+        (void)qm_pwm_stop(&s_pwm);
+        qm_mutex_unlock(&s_lock);
+        return;
+    }
     s_target_angle = servo_pulse_to_angle(s_pulse_us);
     s_output_ticks = 38;
     qm_mutex_unlock(&s_lock);
@@ -281,6 +338,7 @@ void bsp_servo_set_angle(int16_t angle)
     }
 
     qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    s_reminder_ticks = 0; /* Manual command overrides the reminder. */
     s_output_ticks = 38; /* About 1.52 seconds, then release PWM. */
     from = servo_pulse_to_angle(s_pulse_us);
     s_target_angle = angle;
