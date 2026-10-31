@@ -25,12 +25,7 @@ static void pomodoro_sync_camera_stream(const qm_pomodoro_status_t *status)
     {
         return;
     }
-    if (status->state == QM_POMODORO_STATE_FOCUS && !status->paused)
-    {
-        QM_LOGI(LOG_TAG, "focus active: start continuous camera stream");
-        (void)bsp_camera_stream_start();
-    }
-    else
+    if (status->state != QM_POMODORO_STATE_FOCUS || status->paused)
     {
         QM_LOGI(LOG_TAG, "focus inactive (state=%d paused=%d): stop camera stream",
                 (int)status->state, (int)status->paused);
@@ -59,7 +54,7 @@ static void on_pomodoro_event(qm_pomodoro_t t, const qm_pomodoro_event_data_t *e
         agent_app_check_pomodoro_start_sound();
         QM_LOGI(LOG_TAG, "remain=%us", (unsigned)e->status.remaining_sec);
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST && defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
-        /* 专注阶段视频流常开，每 10 秒触发一次坐姿检测 */
+        /* 专注阶段每 10 秒按需开启视频流抓拍一帧进行坐姿检测，抓完即关流 */
         if (e->status.state == QM_POMODORO_STATE_FOCUS && !e->status.paused)
         {
             if (e->status.elapsed_sec > 0 && (e->status.elapsed_sec % 10 == 0))
