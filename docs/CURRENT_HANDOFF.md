@@ -23,8 +23,15 @@
 4. **资源播放**：操作发布、控制和释放串行化；释放失败保留原 ID 并重试，worker 每 100ms 检查终态以覆盖快速完成。退出时拒绝新命令、等待 worker 挂起、清理队列后再销毁控制对象，避免提前复用静态任务内存；取消订阅成功后清空句柄，关闭失败保留控制对象供重试。静态任务栈参数按 ESP-IDF 的字节单位传入完整 12KiB。此为源码修复，未验证 RTOS 并发。
 5. **课表清理**：`ljyd_provision_clear_and_reboot()` 已调用 `ljyd_course_clear_configs()`，清 RAM 并尝试删除 `course_cfg`；底层删除结果仅记录日志，持久化失败与重启后行为仍需实测。
 6. **测试冲突**：整合 `firmware/test_mc_study.c` 的遗留冲突，补充采样、25 秒边界、时间倒退、UNKNOWN、暂停及冷却断言；未编译执行，也未覆盖用户的 `firmware/mc_study.c` 修改。
+7. **耗尽后重开番茄钟**：聊天、姿态或暂停流血导致 HP 归零时，统一调用 `qm_pomodoro_stop()` 结束本轮、回到 IDLE，再请求耗尽音效。再次 start 通过既有 STATE_CHANGED 路径恢复 100 HP 并清除耗尽记录；普通暂停/恢复不补血。移除云端 start 前提前安排开场音乐的调用，只保留成功进入新一轮的状态事件通知。此项仅做源码静态核对及差异检查，未编译、未运行 C 测试或实机验证。
 
 ## 仍需注意
+
+- 针对耗尽后普通对话无语音、但本地音效仍能播放的问题，补齐耗尽音效临时静音的解除：播放结束/编码或播放失败、申请失败时恢复非专注下行；下一轮 LISTENING 也作恢复检查。新增恢复日志 `pomodoro inactive: restored agent downlink audio`，不解除活跃专注的聊天静音。本次未编译或进行设备验证，不能将修补视为音频链路已通过实测。
+
+- 后续实机日志确认云端已通过 `device/up pomodoro/stop` 回报“番茄时钟已结束”，且结束后收到普通 chat/TTS；日志出现一次 `tts playback started generation=5`，但旧 Agent 音频操作在 `audio cleanup gave up ... ret=-2` 后被强制终结，普通 TTS 没有播放开始记录。修复 SDK Agent 音频清理：区分 wait 超时与操作终态结果，终态 ERROR(`-QM_ETIMEOUT`) 不再重复 stop，保持 operation ID 直到 Control release 成功；清理失败持续退避重试，不再清空仍被占用的句柄。LISTENING/TTS_BEGIN 记下准入重开请求，只在旧操作释放后重新开启。新增 `audio listening boundary`、`stream begin rejected` 和 enqueue gate 原因日志。另以独立 local-feedback mute 防止死亡提示音期间云端状态 TTS 提前解除静音；音效结束再回到 Pomodoro mute 状态。均为源码修复，未编译、未实机验证；需要复测操作释放和下一轮普通 TTS。
+
+- 新串口日志已显示 HP 归零后本地回到 `state=0 paused=0`，打印 `pomodoro round stopped` 且不再倒计时，但云端仍回复“当前在番茄时钟”。补上耗尽后本地 stop 成功时的 `pomodoro/stop` device/up 上报；仅发送成功不等于云端业务确认，尚未验证云端是否消费该上报，无断网重试。本次仅静态检查，不编译或操作设备。日志还存在本地音效 `ret=-6`、相机 DQBUF 错误及语音回合重复扣血迹象，不能视为这些链路已验收。
 
 - `firmware/` 与 SDK 有独立源码副本，`board_bench` 使用人工事件，不是生产集成的等价替代。
 - MPU6050 默认 GPIO8 仍与相机 DATA0 冲突，主入口未启用该传感器；舵机使用 P6。

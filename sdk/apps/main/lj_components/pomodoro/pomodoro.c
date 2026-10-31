@@ -232,9 +232,11 @@ static void handle_pomodoro_cloud_down(void *handle,
 
     if (strcmp(subMethod, "start") == 0)
     {
-        agent_app_set_pomodoro_tts_mute(QM_FALSE);
-        agent_app_notify_pomodoro_started();
         ret = pomodoro_start();
+        if (ret == QM_EOK)
+        {
+            agent_app_set_pomodoro_tts_mute(QM_FALSE);
+        }
     }
     else if (strcmp(subMethod, "stop") == 0)
     {

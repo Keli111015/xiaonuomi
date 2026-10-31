@@ -57,6 +57,8 @@ static uint8_t s_turn_final_asr_seen;
 static volatile uint8_t s_pomodoro_start_pending;
 static volatile uint8_t s_pomodoro_start_tts_seen;
 static volatile int64_t s_pomodoro_start_tick_ms;
+static volatile qm_bool s_local_feedback_mute;
+static volatile qm_bool s_pomodoro_tts_muted;
 
 void agent_app_notify_pomodoro_started(void)
 {
@@ -84,10 +86,28 @@ void agent_app_check_pomodoro_start_sound(void)
 
 void agent_app_set_pomodoro_tts_mute(qm_bool muted)
 {
+    s_pomodoro_tts_muted = muted;
     if (s_agent == NULL) {
         return;
     }
-    qm_agent_audio_engine_set_downlink_muted(s_agent, muted);
+    qm_agent_audio_engine_set_downlink_muted(s_agent, muted || s_local_feedback_mute);
+}
+
+void agent_app_set_local_feedback_mute(qm_bool active)
+{
+    s_local_feedback_mute = active;
+    agent_app_set_pomodoro_tts_mute(s_pomodoro_tts_muted);
+    if (!active) agent_app_restore_idle_pomodoro_tts();
+}
+
+void agent_app_restore_idle_pomodoro_tts(void)
+{
+    if (s_agent != NULL && !s_local_feedback_mute &&
+        !morphcube_study_runtime_is_focus_active() &&
+        qm_agent_audio_engine_is_downlink_muted(s_agent)) {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
+        QM_LOGI(LOG_TAG, "pomodoro inactive: restored agent downlink audio");
+    }
 }
 
 static void handle_turn_asr_complete(void)
@@ -105,12 +125,14 @@ static void handle_turn_asr_complete(void)
     }
 }
 #else
+void agent_app_set_local_feedback_mute(qm_bool active) { (void)active; }
 void agent_app_set_pomodoro_tts_mute(qm_bool muted)
 {
     (void)muted;
 }
 void agent_app_notify_pomodoro_started(void) {}
 void agent_app_check_pomodoro_start_sound(void) {}
+void agent_app_restore_idle_pomodoro_tts(void) {}
 #endif
 
 static void abort_tts_wait(void);
@@ -322,6 +344,8 @@ static void on_agent_event(void *event_handler_arg,
                 s_turn_pomodoro_cmd = 0U;
                 s_turn_chat_handled = 0U;
                 s_turn_final_asr_seen = 0U;
+                /* Recovery must not depend on receiving a final ASR event. */
+                agent_app_restore_idle_pomodoro_tts();
             } else if ((notice->data.agent_state.state == QM_AGENT_DIALOG_STATE_THINKING ||
                         notice->data.agent_state.state == QM_AGENT_DIALOG_STATE_SPEAKING) &&
                        s_turn_asr_seen && !s_turn_chat_handled) {

@@ -27,8 +27,8 @@
 #ifndef CONFIG_QM_AGENT_AUDIO_RETRY_MAX_MS
 #define CONFIG_QM_AGENT_AUDIO_RETRY_MAX_MS 200U
 #endif
-/* 保留清理的最大连续重试次数: 下层长期拒绝归还操作(如 api_users 未归还)时,
- * 无界重试会让本 Agent 永久停在该操作上并卡死后续播放, 故必须有界放弃。 */
+/* Saturate the retry counter and report persistent cleanup failure. Operation
+ * ownership must still be retained until Control release succeeds. */
 #ifndef CONFIG_QM_AGENT_AUDIO_CLEANUP_MAX_RETRY
 #define CONFIG_QM_AGENT_AUDIO_CLEANUP_MAX_RETRY 20U
 #endif
@@ -320,6 +320,7 @@ static int release_operation(qm_agent_handle_t handle,
                              qm_bool stop,
                              uint32_t reason)
 {
+    qm_audio_control_snapshot_t snapshot;
     int ret;
 
     if (handle == NULL || operation == QM_AUDIO_INVALID_REQUEST_ID) {
@@ -332,7 +333,20 @@ static int release_operation(qm_agent_handle_t handle,
     ret = qm_audio_control_wait(handle->audio.control,
                                 operation,
                                 CONFIG_QM_AGENT_AUDIO_OPERATION_TIMEOUT_MS);
-    if (ret == -QM_ETIMEOUT || ret == -QM_EBUSY) return ret;
+    if (ret == -QM_ETIMEOUT || ret == -QM_EBUSY) {
+        /* wait() also returns the terminal operation's result. A terminal
+         * timeout is not a wait timeout: release it instead of retrying wait
+         * forever and eventually abandoning an owned operation. */
+        int observed = qm_audio_control_get_snapshot(handle->audio.control,
+                                                     operation, &snapshot);
+        if (observed != QM_EOK ||
+            (snapshot.state != QM_AUDIO_CONTROL_FINISHED &&
+             snapshot.state != QM_AUDIO_CONTROL_CANCELLED &&
+             snapshot.state != QM_AUDIO_CONTROL_PREEMPTED &&
+             snapshot.state != QM_AUDIO_CONTROL_ERROR)) {
+            return ret;
+        }
+    }
     return qm_audio_control_release(handle->audio.control,
                                     operation,
                                     CONFIG_QM_AGENT_AUDIO_OPERATION_TIMEOUT_MS);
@@ -516,6 +530,13 @@ int qm_agent_audio_engine_begin_stream(qm_agent_handle_t handle,
     if (!handle->audio.stream_accepting || handle->audio.downlink_muted ||
         handle->audio.playback_operation != QM_AUDIO_INVALID_REQUEST_ID ||
         handle->audio.playback_pending) {
+        QM_AGENT_LOGW(LOG_TAG, QM_AGENT_LOG_DOWNLINK,
+                      "stream begin rejected muted=%d accepting=%d cleanup=%d op=%u pending=%d",
+                      (int)handle->audio.downlink_muted,
+                      (int)handle->audio.stream_accepting,
+                      (int)handle->audio.cleanup_pending,
+                      (unsigned)handle->audio.playback_operation,
+                      (int)handle->audio.playback_pending);
         (void)qm_mutex_unlock(&handle->audio.lock);
         return -QM_EBUSY;
     }
@@ -531,6 +552,7 @@ int qm_agent_audio_engine_begin_stream(qm_agent_handle_t handle,
     handle->audio.stream_error_pending = QM_FALSE;
     handle->audio.stream_error = QM_EOK;
     handle->audio.playback_pending = QM_TRUE;
+    handle->audio.stream_reopen_pending = QM_FALSE;
     handle->audio.cleanup_stop = QM_FALSE;
     handle->audio.pending_operation = QM_AUDIO_INVALID_REQUEST_ID;
     handle->audio.pending_event_valid = QM_FALSE;
@@ -649,6 +671,7 @@ int qm_agent_audio_engine_enqueue_transport(qm_agent_handle_t handle,
     qm_agent_audio_format_t resolved = {0};
     qm_audio_data_t packet = {0};
     qm_bool post_error = QM_FALSE;
+    qm_bool muted = QM_FALSE;
     uint32_t generation = QM_AUDIO_INVALID_GENERATION;
     int ret = QM_EOK;
 
@@ -665,17 +688,20 @@ int qm_agent_audio_engine_enqueue_transport(qm_agent_handle_t handle,
         qm_bool accepting = handle->audio.stream_accepting;
         qm_bool finished = handle->audio.stream_finished;
         qm_bool fmt_valid = handle->audio.stream_format_valid;
+        muted = handle->audio.downlink_muted;
         (void)qm_mutex_unlock(&handle->audio.lock);
         /* 日志宏在关闭日志的构建(CONFIG_QM_LOG_SUPPORT=0)里展开为空, 显式引用这些
          * 仅用于日志的值, 否则会触发 -Werror,-Wunused-variable。 */
         (void)accepting;
         (void)finished;
         (void)fmt_valid;
+        (void)muted;
         /* 只在本流首次被拒时上报，后续帧已被上面的错误标记短路。 */
         if (first) {
             QM_AGENT_LOGW(LOG_TAG, QM_AGENT_LOG_DOWNLINK,
-                          "enqueue gated op=%u accepting=%d finished=%d fmt=%d",
-                          (unsigned)operation, (int)accepting, (int)finished, (int)fmt_valid);
+                          "enqueue gated op=%u muted=%d accepting=%d finished=%d fmt=%d",
+                          (unsigned)operation, (int)muted, (int)accepting,
+                          (int)finished, (int)fmt_valid);
         }
         return -QM_EBUSY;
     }
@@ -861,6 +887,7 @@ static int finish_cleanup(qm_agent_handle_t handle)
     uint32_t generation;
     qm_bool notify;
     qm_bool stop;
+    qm_bool terminal_timeout;
     int ret;
 
     (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
@@ -873,12 +900,17 @@ static int finish_cleanup(qm_agent_handle_t handle)
     event = handle->audio.cleanup_event;
     notify = handle->audio.cleanup_notify;
     stop = handle->audio.cleanup_stop;
+    terminal_timeout = (event.type == QM_AUDIO_EVENT_ERROR &&
+                        event.result == -QM_ETIMEOUT);
     (void)qm_mutex_unlock(&handle->audio.lock);
 
-    ret = release_operation(handle, operation, stop, QM_AGENT_AUDIO_STOP_REASON_ABORT);
+    /* A timed-out terminal means playback has already stopped. Avoid arming a
+     * STOP transition on its half-released operation; wait and release it. */
+    ret = release_operation(handle, operation, stop && !terminal_timeout,
+                            QM_AGENT_AUDIO_STOP_REASON_ABORT);
     if (ret != QM_EOK) {
         uint16_t attempt;
-        qm_bool give_up;
+        qm_bool persistent;
 
         (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
         if (handle->audio.cleanup_retry < CONFIG_QM_AGENT_AUDIO_CLEANUP_MAX_RETRY) {
@@ -886,19 +918,12 @@ static int finish_cleanup(qm_agent_handle_t handle)
         }
         attempt = handle->audio.cleanup_retry;
         (void)qm_mutex_unlock(&handle->audio.lock);
-        give_up = attempt >= CONFIG_QM_AGENT_AUDIO_CLEANUP_MAX_RETRY;
+        persistent = attempt >= CONFIG_QM_AGENT_AUDIO_CLEANUP_MAX_RETRY;
         QM_AGENT_LOGW(LOG_TAG, QM_AGENT_LOG_CONTROL,
-                      "audio cleanup retained op=%u ret=%d attempt=%u give_up=%d",
-                      (unsigned)operation, ret, (unsigned)attempt, (int)give_up);
-        if (!give_up) {
-            schedule_audio(handle, QM_TRUE);
-            return ret;
-        }
-        /* 有界放弃: 下层长时间拒绝归还该操作(如内部 api_users 未归还)时, 继续
-         * 重试只会让本 Agent 永久停在旧操作上并卡死后续播放。此处按已收到的
-         * 下行终态收尾, 交由上层重建下一次播放。 */
-        QM_AGENT_LOGE(LOG_TAG, "audio cleanup gave up op=%u ret=%d, forcing terminal",
-                      (unsigned)operation, ret);
+                      "audio cleanup retained op=%u ret=%d attempt=%u persistent=%d",
+                      (unsigned)operation, ret, (unsigned)attempt, (int)persistent);
+        schedule_audio(handle, QM_TRUE);
+        return ret;
     }
     (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
     handle->audio.playback_operation = QM_AUDIO_INVALID_REQUEST_ID;
@@ -914,8 +939,15 @@ static int finish_cleanup(qm_agent_handle_t handle)
     handle->audio.cleanup_pending = QM_FALSE;
     handle->audio.cleanup_retry = 0U;
     handle->audio.pending_event_valid = QM_FALSE;
-    if (notify && !stop && event.type == QM_AUDIO_EVENT_FINISHED &&
-        !handle->audio.capture_closing) handle->audio.stream_accepting = QM_TRUE;
+    /* A failure/preemption closes the old reply, not every future reply.
+     * LISTENING or TTS_BEGIN may have arrived while release was pending. Only
+     * reopen after successful release, and preserve explicit abort-ack gates. */
+    if (((notify && ((!stop && event.type == QM_AUDIO_EVENT_FINISHED) ||
+                      terminal_timeout)) ||
+         handle->audio.stream_reopen_pending) && !handle->audio.capture_closing) {
+        handle->audio.stream_accepting = QM_TRUE;
+        handle->audio.stream_reopen_pending = QM_FALSE;
+    }
     refresh_upload_locked(handle);
     (void)qm_mutex_unlock(&handle->audio.lock);
     if (notify) {
@@ -989,6 +1021,7 @@ int qm_agent_audio_engine_abort_stream(qm_agent_handle_t handle, qm_bool wait_fo
     (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
     handle->audio.stream_generation = next_generation(handle->audio.stream_generation);
     handle->audio.stream_accepting = !wait_for_ack && !handle->audio.capture_closing;
+    if (wait_for_ack) handle->audio.stream_reopen_pending = QM_FALSE;
     if (!wait_for_ack) handle->audio.remote_abort_pending = QM_FALSE;
     handle->audio.stream_begin_pending = QM_FALSE;
     handle->audio.stream_finished = QM_FALSE;
@@ -1057,6 +1090,7 @@ int qm_agent_audio_engine_begin_reply(qm_agent_handle_t handle,
         return -QM_EINVAL;
     }
     (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
+    handle->audio.stream_reopen_pending = QM_TRUE;
     live = (handle->audio.playback_operation != QM_AUDIO_INVALID_REQUEST_ID ||
             handle->audio.playback_pending) && handle->audio.stream_accepting &&
            !handle->audio.stream_finished && !handle->audio.cleanup_pending;
@@ -1154,6 +1188,7 @@ int qm_agent_audio_engine_open(qm_agent_handle_t handle)
         BACKOFF_ALGORITHM_RETRY_FOREVER);
     handle->audio.stream_generation = 1U;
     handle->audio.stream_accepting = QM_FALSE;
+    handle->audio.stream_reopen_pending = QM_FALSE;
     handle->audio.playback_operation = QM_AUDIO_INVALID_REQUEST_ID;
     handle->audio.pending_operation = QM_AUDIO_INVALID_REQUEST_ID;
     handle->audio.stream_begin_pending = QM_FALSE;
@@ -1182,6 +1217,7 @@ int qm_agent_audio_engine_start(qm_agent_handle_t handle)
     handle->audio.audio_subscription_valid = QM_TRUE;
     (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
     handle->audio.stream_accepting = QM_TRUE;
+    handle->audio.stream_reopen_pending = QM_FALSE;
     handle->audio.stream_begin_pending = QM_FALSE;
     handle->audio.capture_closing = QM_FALSE;
     handle->audio.dialog_state = QM_AGENT_DIALOG_STATE_SILENT;
@@ -1224,6 +1260,7 @@ int qm_agent_audio_engine_stop(qm_agent_handle_t handle)
     if (handle == NULL || !handle->audio.runtime_valid) return -QM_EINVAL;
     (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
     handle->audio.capture_closing = QM_TRUE;
+    handle->audio.stream_reopen_pending = QM_FALSE;
     handle->audio.remote_abort_pending = QM_FALSE;
     handle->audio.upload_enabled = QM_FALSE;
     handle->audio.transport_ready = QM_FALSE;
@@ -1281,6 +1318,20 @@ void qm_agent_audio_engine_set_dialog_state(qm_agent_handle_t handle,
     if (handle == NULL || !handle->audio.runtime_valid) return;
     (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
     handle->audio.dialog_state = state;
+    if (state == QM_AGENT_DIALOG_STATE_LISTENING && !handle->audio.capture_closing) {
+        handle->audio.stream_reopen_pending = QM_TRUE;
+        if (!handle->audio.cleanup_pending &&
+            handle->audio.playback_operation == QM_AUDIO_INVALID_REQUEST_ID &&
+            !handle->audio.playback_pending) {
+            handle->audio.stream_accepting = QM_TRUE;
+            handle->audio.stream_reopen_pending = QM_FALSE;
+        }
+        QM_LOGI(LOG_TAG, "audio listening boundary muted=%d accepting=%d cleanup=%d op=%u reopen=%d",
+                (int)handle->audio.downlink_muted, (int)handle->audio.stream_accepting,
+                (int)handle->audio.cleanup_pending,
+                (unsigned)handle->audio.playback_operation,
+                (int)handle->audio.stream_reopen_pending);
+    }
     refresh_upload_locked(handle);
     (void)qm_mutex_unlock(&handle->audio.lock);
     schedule_audio(handle, QM_FALSE);
