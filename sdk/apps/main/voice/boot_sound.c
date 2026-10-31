@@ -115,6 +115,12 @@ static local_sound_cache_t s_sounds[LOCAL_SOUND_COUNT] = {
     },
 };
 
+/* Protect the one-slot request mailbox and lazy task creation. The lock is
+ * held only while publishing a request; encoding and playback stay unlocked. */
+static portMUX_TYPE s_request_init_mux = portMUX_INITIALIZER_UNLOCKED;
+static StaticSemaphore_t s_request_lock_buf;
+static SemaphoreHandle_t s_request_lock;
+
 static StaticTask_t s_tcb;
 static StaticSemaphore_t s_sem_buf;
 static SemaphoreHandle_t s_sem;
@@ -264,9 +270,29 @@ static void boot_sound_play_local(const local_sound_cache_t *snd)
     }
     QM_LOGI(LOG_TAG, "%s local play done ret=%d frames=%u/%u",
             snd->name, ret, (unsigned)i, (unsigned)snd->opus_frames);
-    (void)qm_audio_control_release(control, operation, 1000);
-    (void)qm_audio_control_shutdown(control, 1000);
-    (void)qm_audio_control_destroy(control);
+    /* A terminal operation can still have a short-lived event/API reference.
+     * Let that reference drain before tearing down this private Control. */
+    for (attempt = 0; attempt < 10; attempt++) {
+        ret = qm_audio_control_release(control, operation, 1000);
+        if (ret == QM_EOK) break;
+        if (ret != -QM_EBUSY) break;
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    if (ret != QM_EOK) {
+        /* Give the Control event worker a little more time, but never shut down
+         * before the operation is released: shutdown intentionally rejects
+         * further release attempts. */
+        for (attempt = 0; attempt < 4 && ret == -QM_EBUSY; attempt++) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            ret = qm_audio_control_release(control, operation, 1000);
+        }
+    }
+    if (ret == QM_EOK) {
+        (void)qm_audio_control_shutdown(control, 1000);
+        (void)qm_audio_control_destroy(control);
+    } else {
+        QM_LOGW(LOG_TAG, "%s release deferred ret=%d", snd->name, ret);
+    }
 }
 
 /* 播一遍；编不出来就直接放弃，不再去抢通路 */
@@ -303,9 +329,19 @@ static void boot_sound_task(void *arg)
         }
         /* Snapshot the request: another producer can update s_req_sound
          * while this sound is playing. */
-        local_sound_id_t id = s_req_sound;
+        local_sound_id_t id;
+        if (xSemaphoreTake(s_request_lock, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        id = s_req_sound;
+        (void)xSemaphoreGive(s_request_lock);
         boot_sound_play_once(id);
-        if (id == LOCAL_SOUND_DEATH || s_req_sound != LOCAL_SOUND_DEATH) {
+        if (xSemaphoreTake(s_request_lock, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        local_sound_id_t pending = s_req_sound;
+        (void)xSemaphoreGive(s_request_lock);
+        if (id == LOCAL_SOUND_DEATH || pending != LOCAL_SOUND_DEATH) {
             agent_app_set_local_feedback_mute(QM_FALSE);
         }
         /* The single pending request can merge/replace a death sound. Run
@@ -320,17 +356,33 @@ static qm_err_t local_sound_request(local_sound_id_t id)
 {
     static StackType_t *stack;
 
+    if (s_request_lock == NULL) {
+        portENTER_CRITICAL(&s_request_init_mux);
+        if (s_request_lock == NULL) {
+            s_request_lock = xSemaphoreCreateMutexStatic(&s_request_lock_buf);
+        }
+        portEXIT_CRITICAL(&s_request_init_mux);
+    }
+    if (s_request_lock == NULL) {
+        return -QM_ENOMEM;
+    }
+    if (xSemaphoreTake(s_request_lock, portMAX_DELAY) != pdTRUE) {
+        return -QM_EBUSY;
+    }
+
     if (s_task_up == 0) {
         stack = (StackType_t *)heap_caps_malloc(BS_STACK_BYTES,
                                                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (stack == NULL) {
             QM_LOGE(LOG_TAG, "stack alloc failed");
+            (void)xSemaphoreGive(s_request_lock);
             return -QM_ENOMEM;
         }
         s_sem = xSemaphoreCreateBinaryStatic(&s_sem_buf);
         if (s_sem == NULL) {
             QM_LOGE(LOG_TAG, "sem create failed");
             heap_caps_free(stack);
+            (void)xSemaphoreGive(s_request_lock);
             return -QM_ENOMEM;
         }
         if (xTaskCreateStatic(boot_sound_task, "boot_snd",
@@ -338,14 +390,17 @@ static qm_err_t local_sound_request(local_sound_id_t id)
                               NULL, BS_TASK_PRIO, stack, &s_tcb) == NULL) {
             QM_LOGE(LOG_TAG, "task create failed");
             heap_caps_free(stack);
+            (void)xSemaphoreGive(s_request_lock);
             return -QM_ENOMEM;
         }
         s_task_up = 1;
     }
 
     s_req_sound = id;
+    SemaphoreHandle_t sem = s_sem;
+    (void)xSemaphoreGive(s_request_lock);
     /* 二值信号量已满时合并请求，待播项已更新为最新 id；不打断当前播放。 */
-    if (xSemaphoreGive(s_sem) != pdTRUE) {
+    if (xSemaphoreGive(sem) != pdTRUE) {
         QM_LOGD(LOG_TAG, "busy, request merged");
     }
     return QM_EOK;
