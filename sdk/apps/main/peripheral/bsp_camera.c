@@ -41,6 +41,9 @@
 #define CAM_STREAM_PRIO         12
 #define CAM_STREAM_CORE         1
 #define CAM_DQBUF_POLL_MS       20
+#define CAM_DQBUF_EPERM_RETRY_MAX 3
+#define CAM_STREAM_RECOVERY_MAX 2
+#define CAM_EMPTY_FRAME_RECOVERY_THRESHOLD 8
 #define CAM_LOG_EVERY_FRAMES    150
 #define CAM_STREAM_STACK        (6 * 1024)
 #define CAM_STACK_CAPS          (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
@@ -87,6 +90,35 @@ static esp_err_t cam_setup_buffers(void);
 static esp_err_t cam_stream_on(void);
 static esp_err_t cam_stream_off(void);
 static esp_err_t cam_ensure_stream_task(void);
+
+static bool cam_stream_desired(void)
+{
+    bool desired;
+
+    portENTER_CRITICAL(&s_req_mux);
+    desired = s_continuous_stream || s_req.state == 1;
+    if (s_stream_stop_req) desired = false;
+    portEXIT_CRITICAL(&s_req_mux);
+    return desired;
+}
+
+/* All V4L2 operations remain owned by cam_stream_task. A recovery deliberately
+ * rebuilds the queue instead of reusing a buffer index returned by a failed
+ * DQBUF, because that index has no valid ownership on error. */
+static esp_err_t cam_stream_recover(void)
+{
+    esp_err_t ret;
+
+    ret = cam_stream_off();
+    if (ret != ESP_OK) return ret;
+    if (!cam_stream_desired()) return ESP_OK;
+
+    ret = cam_stream_on();
+    if (ret == ESP_OK) {
+        ESP_LOGI(LOG_TAG, "stream recovery complete");
+    }
+    return ret;
+}
 
 void bsp_camera_get_resolution(uint32_t *width, uint32_t *height)
 {
@@ -319,6 +351,9 @@ static void cam_stream_task(void *arg)
     uint32_t frames = 0;
     uint32_t good = 0;
     uint32_t empty = 0;
+    uint8_t dqbuf_eperm_count = 0;
+    uint8_t recovery_count = 0;
+    uint8_t empty_frame_count = 0;
     TickType_t t0 = xTaskGetTickCount();
     const uint32_t expect = s_cam.width * s_cam.height * 2;
 
@@ -342,12 +377,17 @@ static void cam_stream_task(void *arg)
             (TickType_t)(xTaskGetTickCount() - s_req.requested_at) >= pdMS_TO_TICKS(5000);
         portEXIT_CRITICAL(&s_req_mux);
 
-        if (stop_requested || timed_out) {
+        /* A start may supersede a queued stop before this task runs. Treat the
+         * latest desired state as authoritative so an old stop cannot tear
+         * down a newly requested stream. */
+        if ((stop_requested && !continuous) || timed_out) {
             esp_err_t off_ret = cam_stream_off();
             cam_complete_request(timed_out ? ESP_ERR_TIMEOUT : ESP_ERR_INVALID_STATE);
-            if (stop_requested && off_ret == ESP_OK) {
+            if (stop_requested && !continuous && off_ret == ESP_OK) {
                 portENTER_CRITICAL(&s_req_mux);
-                s_stream_stop_req = false; /* Also consume stop while already off. */
+                if (!s_continuous_stream) {
+                    s_stream_stop_req = false; /* Consume the stop only if no newer start won. */
+                }
                 portEXIT_CRITICAL(&s_req_mux);
             }
             if (off_ret != ESP_OK) vTaskDelay(pdMS_TO_TICKS(100));
@@ -365,6 +405,9 @@ static void cam_stream_task(void *arg)
 
             if (need_stream && !worker_busy) {
                 if (cam_stream_on() == ESP_OK) {
+                    dqbuf_eperm_count = 0;
+                    empty_frame_count = 0;
+                    recovery_count = 0;
                     continue;
                 }
                 cam_complete_request(ESP_FAIL);
@@ -377,14 +420,48 @@ static void cam_stream_task(void *arg)
         buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         buf.memory = V4L2_MEMORY_MMAP;
         if (ioctl(s_cam.fd, VIDIOC_DQBUF, &buf) != 0) {
-            if (errno != EAGAIN && errno != EINTR && errno != ETIMEDOUT) {
-                ESP_LOGE(LOG_TAG, "VIDIOC_DQBUF failed, errno=%d", errno);
+            int dq_errno = errno;
+            if (dq_errno == EPERM) {
+                dqbuf_eperm_count++;
+                if (dqbuf_eperm_count < CAM_DQBUF_EPERM_RETRY_MAX) {
+                    ESP_LOGW(LOG_TAG, "VIDIOC_DQBUF EPERM retry=%u/%u",
+                             (unsigned)dqbuf_eperm_count,
+                             (unsigned)CAM_DQBUF_EPERM_RETRY_MAX);
+                    vTaskDelay(pdMS_TO_TICKS(CAM_DQBUF_POLL_MS));
+                    continue;
+                }
+
+                if (recovery_count >= CAM_STREAM_RECOVERY_MAX) {
+                    ESP_LOGE(LOG_TAG, "VIDIOC_DQBUF EPERM recovery exhausted=%u",
+                             (unsigned)recovery_count);
+                    cam_complete_request(ESP_FAIL);
+                    (void)cam_stream_off();
+                    dqbuf_eperm_count = 0;
+                    continue;
+                }
+
+                recovery_count++;
+                ESP_LOGW(LOG_TAG, "VIDIOC_DQBUF EPERM: recover stream attempt=%u/%u",
+                         (unsigned)recovery_count,
+                         (unsigned)CAM_STREAM_RECOVERY_MAX);
+                if (cam_stream_recover() != ESP_OK) {
+                    ESP_LOGE(LOG_TAG, "stream recovery failed attempt=%u",
+                             (unsigned)recovery_count);
+                    cam_complete_request(ESP_FAIL);
+                    (void)cam_stream_off();
+                }
+                dqbuf_eperm_count = 0;
+                continue;
+            }
+            if (dq_errno != EAGAIN && dq_errno != EINTR && dq_errno != ETIMEDOUT) {
+                ESP_LOGE(LOG_TAG, "VIDIOC_DQBUF failed, errno=%d", dq_errno);
                 vTaskDelay(pdMS_TO_TICKS(1000));
             } else {
                 vTaskDelay(pdMS_TO_TICKS(CAM_DQBUF_POLL_MS));
             }
             continue;
         }
+        dqbuf_eperm_count = 0;
 
         if (buf.index >= CAM_BUF_NUM || s_cam.buffer[buf.index] == NULL ||
             buf.bytesused > s_cam.buffer_len[buf.index]) {
@@ -399,8 +476,11 @@ static void cam_stream_task(void *arg)
         if (buf.bytesused == expect) {
             good++;
             s_warmup_frames++;
+            recovery_count = 0;
+            empty_frame_count = 0;
         } else {
             empty++;
+            if (empty_frame_count < 0xffU) empty_frame_count++;
         }
 
         if ((frames % CAM_LOG_EVERY_FRAMES) == 0) {
@@ -420,6 +500,7 @@ static void cam_stream_task(void *arg)
 
         bool frame_ready_for_oneshot = (s_warmup_frames >= 2);
         bool stop_after_frame = false;
+        bool recover_after_qbuf = empty_frame_count >= CAM_EMPTY_FRAME_RECOVERY_THRESHOLD;
         TaskHandle_t notify_target = NULL;
         uint8_t *copy_dst = NULL;
 
@@ -453,8 +534,36 @@ static void cam_stream_task(void *arg)
         if (ioctl(s_cam.fd, VIDIOC_QBUF, &buf) != 0) {
             ESP_LOGE(LOG_TAG, "VIDIOC_QBUF return failed, errno=%d", errno);
             stop_after_frame = true; /* Rebuild the queue before more capture. */
+            cam_complete_request(ESP_FAIL);
         } else {
             s_queued_buffers |= 1U << buf.index;
+            if (recover_after_qbuf && !stop_after_frame) {
+                ESP_LOGW(LOG_TAG,
+                         "camera invalid frame streak=%u bytes=%u/%u, recover after QBUF",
+                         (unsigned)empty_frame_count,
+                         (unsigned)buf.bytesused,
+                         (unsigned)expect);
+                if (recovery_count >= CAM_STREAM_RECOVERY_MAX) {
+                    ESP_LOGE(LOG_TAG,
+                             "camera invalid frame recovery exhausted=%u",
+                             (unsigned)recovery_count);
+                    cam_complete_request(ESP_FAIL);
+                    (void)cam_stream_off();
+                } else {
+                    recovery_count++;
+                    ESP_LOGW(LOG_TAG,
+                             "camera invalid frame: recover stream attempt=%u/%u",
+                             (unsigned)recovery_count,
+                             (unsigned)CAM_STREAM_RECOVERY_MAX);
+                    if (cam_stream_recover() != ESP_OK) {
+                        ESP_LOGE(LOG_TAG, "invalid frame stream recovery failed attempt=%u",
+                                 (unsigned)recovery_count);
+                        cam_complete_request(ESP_FAIL);
+                        (void)cam_stream_off();
+                    }
+                }
+                empty_frame_count = 0;
+            }
         }
 
         /* 抓拍完成后立即停流以完全释放 SPI/DMA 资源给 CPU/PSRAM 推理使用 */
@@ -531,6 +640,7 @@ esp_err_t bsp_camera_stream_start(void)
     }
     portENTER_CRITICAL(&s_req_mux);
     s_continuous_stream = true;
+    s_stream_stop_req = false;
     portEXIT_CRITICAL(&s_req_mux);
     if (s_stream_task != NULL) {
         xTaskNotifyGive(s_stream_task);
