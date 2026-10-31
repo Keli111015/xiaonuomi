@@ -46,6 +46,8 @@ bool mc_study_pose(mc_study *s, mc_pose pose, uint64_t now)
         s->abnormal_ms = 0;
     } else {
         uint64_t dt = now - s->pose_ms;
+        /* Missing inference time is not evidence of continued bad posture. */
+        if (dt > 2000) dt = 2000;
         s->abnormal_ms = s->abnormal_ms + dt > 15000 ? 15000 : s->abnormal_ms + dt;
     }
     s->has_pose = true;

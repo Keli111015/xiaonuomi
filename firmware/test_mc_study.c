@@ -34,6 +34,24 @@ int main(void)
     assert(!mc_study_pose(&s, MC_UNKNOWN, 91000));
     assert(!s.has_pose);
 
+    /* Sparse results must not manufacture 15 seconds of visual evidence. */
+    mc_study_reset(&s);
+    mc_study_set_active(&s, true);
+    assert(!mc_study_pose(&s, MC_TILTED, 0));
+    assert(!mc_study_pose(&s, MC_TILTED, 8000));
+    assert(!mc_study_pose(&s, MC_TILTED, 16000));
+    assert(s.abnormal_ms == 4000 && s.reminders == 0);
+    assert(!mc_study_pose(&s, MC_NORMAL, 18000));
+    assert(s.abnormal_ms == 0);
+    assert(!mc_study_pose(&s, MC_TILTED, 20000));
+    assert(!mc_study_pose(&s, MC_UNKNOWN, 22000));
+    assert(!mc_study_pose(&s, MC_TILTED, 24000));
+    assert(s.abnormal_ms == 0);
+    assert(!mc_study_pose(&s, MC_TILTED, 33000));
+    assert(s.abnormal_ms == 0); /* gap >8s starts a new sequence */
+    assert(!mc_study_pose(&s, MC_TILTED, 32000));
+    assert(s.abnormal_ms == 0); /* clock rollback */
+
     mc_study_reset(&s);
     mc_study_set_active(&s, true);
     for (uint64_t i = 0; i < 10; ++i)
