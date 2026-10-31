@@ -18,8 +18,9 @@ Yolo11nPose::Yolo11nPose(const char *model_name, float score_thr, float nms_thr)
 {
 #if !CONFIG_COCO_POSE_MODEL_IN_SDCARD
     bool param_copy = true;
+    size_t spiram_total = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
     size_t spiram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-    if (spiram_free < 3 * 1024 * 1024) {
+    if (spiram_total < 9 * 1024 * 1024 || spiram_free < 5 * 1024 * 1024) {
         param_copy = false;
     }
     ESP_LOGI("Yolo11nPose", "loading model %s, spiram_free=%u, param_copy=%d",

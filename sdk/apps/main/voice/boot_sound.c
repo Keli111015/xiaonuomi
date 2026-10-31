@@ -10,6 +10,7 @@
 #include "agent_app.h"      /* 对话中先停掉 agent 输出，再自己播 */
 
 #include "esp_heap_caps.h"
+#include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -30,25 +31,42 @@
 
 /* opus_encode 内部 alloca，参考 pcm_drv 的编码任务：栈从 PSRAM 拿 */
 #define BS_STACK_BYTES      (30 * 1024)
-#define BS_TASK_PRIO        (5)
+#define BS_TASK_PRIO        (14)
 
 #define BS_ACQUIRE_MS       (800)   /* 单次申请播放权的等待上限 */
 #define BS_ACQUIRE_RETRY    (4)     /* 对端释放通路有延迟，失败重试几次 */
 #define BS_ACQUIRE_GAP_MS   (250)
 #define BS_WRITE_MS         (1000)
-#define BS_DRAIN_MS         (3000)
+#define BS_DRAIN_MS         (7000)
 
-/* target_add_binary_data(... RENAME_TO boot_sound_pcm / hurt_sound_pcm) 生成的符号 */
+/* target_add_binary_data(... RENAME_TO boot_sound_pcm / hurt_sound_N_pcm / death_sound_pcm / start_sound_pcm) 生成的符号 */
 extern const uint8_t boot_sound_pcm_start[] asm("_binary_boot_sound_pcm_start");
 extern const uint8_t boot_sound_pcm_end[] asm("_binary_boot_sound_pcm_end");
-extern const uint8_t hurt_sound_pcm_start[] asm("_binary_hurt_sound_pcm_start");
-extern const uint8_t hurt_sound_pcm_end[] asm("_binary_hurt_sound_pcm_end");
+extern const uint8_t hurt_sound_0_pcm_start[] asm("_binary_hurt_sound_0_pcm_start");
+extern const uint8_t hurt_sound_0_pcm_end[] asm("_binary_hurt_sound_0_pcm_end");
+extern const uint8_t hurt_sound_1_pcm_start[] asm("_binary_hurt_sound_1_pcm_start");
+extern const uint8_t hurt_sound_1_pcm_end[] asm("_binary_hurt_sound_1_pcm_end");
+extern const uint8_t hurt_sound_2_pcm_start[] asm("_binary_hurt_sound_2_pcm_start");
+extern const uint8_t hurt_sound_2_pcm_end[] asm("_binary_hurt_sound_2_pcm_end");
+extern const uint8_t hurt_sound_3_pcm_start[] asm("_binary_hurt_sound_3_pcm_start");
+extern const uint8_t hurt_sound_3_pcm_end[] asm("_binary_hurt_sound_3_pcm_end");
+extern const uint8_t death_sound_pcm_start[] asm("_binary_death_sound_pcm_start");
+extern const uint8_t death_sound_pcm_end[] asm("_binary_death_sound_pcm_end");
+extern const uint8_t start_sound_pcm_start[] asm("_binary_start_sound_pcm_start");
+extern const uint8_t start_sound_pcm_end[] asm("_binary_start_sound_pcm_end");
 
 typedef enum {
     LOCAL_SOUND_BOOT = 0,
-    LOCAL_SOUND_HURT = 1,
+    LOCAL_SOUND_HURT_0 = 1,
+    LOCAL_SOUND_HURT_1 = 2,
+    LOCAL_SOUND_HURT_2 = 3,
+    LOCAL_SOUND_HURT_3 = 4,
+    LOCAL_SOUND_DEATH = 5,
+    LOCAL_SOUND_START = 6,
     LOCAL_SOUND_COUNT
 } local_sound_id_t;
+
+#define LOCAL_HURT_COUNT    (4U)
 
 typedef struct {
     const char *name;
@@ -65,10 +83,35 @@ static local_sound_cache_t s_sounds[LOCAL_SOUND_COUNT] = {
         .pcm_start = boot_sound_pcm_start,
         .pcm_end = boot_sound_pcm_end,
     },
-    [LOCAL_SOUND_HURT] = {
-        .name = "hurt",
-        .pcm_start = hurt_sound_pcm_start,
-        .pcm_end = hurt_sound_pcm_end,
+    [LOCAL_SOUND_HURT_0] = {
+        .name = "hurt_0",
+        .pcm_start = hurt_sound_0_pcm_start,
+        .pcm_end = hurt_sound_0_pcm_end,
+    },
+    [LOCAL_SOUND_HURT_1] = {
+        .name = "hurt_1",
+        .pcm_start = hurt_sound_1_pcm_start,
+        .pcm_end = hurt_sound_1_pcm_end,
+    },
+    [LOCAL_SOUND_HURT_2] = {
+        .name = "hurt_2",
+        .pcm_start = hurt_sound_2_pcm_start,
+        .pcm_end = hurt_sound_2_pcm_end,
+    },
+    [LOCAL_SOUND_HURT_3] = {
+        .name = "hurt_3",
+        .pcm_start = hurt_sound_3_pcm_start,
+        .pcm_end = hurt_sound_3_pcm_end,
+    },
+    [LOCAL_SOUND_DEATH] = {
+        .name = "death",
+        .pcm_start = death_sound_pcm_start,
+        .pcm_end = death_sound_pcm_end,
+    },
+    [LOCAL_SOUND_START] = {
+        .name = "start",
+        .pcm_start = start_sound_pcm_start,
+        .pcm_end = start_sound_pcm_end,
     },
 };
 
@@ -179,7 +222,7 @@ static void boot_sound_play_local(const local_sound_cache_t *snd)
     req.codec.pcm.sample_rate_hz = BS_RATE_HZ;
     req.codec.pcm.channels = 1;
     req.codec.pcm.sample = QM_AUDIO_PCM_S16;
-    req.priority = QM_AUDIO_PRIORITY_HIGH;
+    req.priority = QM_AUDIO_PRIORITY_CRITICAL;
     req.admission = QM_AUDIO_ADMISSION_PREEMPT_LOWER;
     req.admission_timeout_ms = BS_ACQUIRE_MS;
 
@@ -241,9 +284,7 @@ static void boot_sound_play_once(local_sound_id_t id)
     }
 
     if (agent_app_is_active()) {
-        (void)agent_app_set_resource_mode(QM_TRUE);
-        (void)agent_app_abort_output();
-        (void)agent_app_set_resource_mode(QM_FALSE);
+        (void)agent_app_prepare_for_local_sound(600U);
     }
 
     QM_LOGI(LOG_TAG, "play %s (%u ms local)", snd->name,
@@ -306,5 +347,41 @@ qm_err_t boot_sound_start(void)
 
 qm_err_t hurt_sound_start(void)
 {
-    return local_sound_request(LOCAL_SOUND_HURT);
+    static uint8_t s_last_idx = 0xFF;
+    uint32_t r = esp_random();
+    uint8_t idx = (uint8_t)(r % LOCAL_HURT_COUNT);
+
+    /* 伪随机：尽量避免连续两次播放相同的扣血音效，提升听感丰富度 */
+    if (idx == s_last_idx) {
+        idx = (uint8_t)((idx + 1U + ((r >> 8) % (LOCAL_HURT_COUNT - 1U))) % LOCAL_HURT_COUNT);
+    }
+    s_last_idx = idx;
+
+    QM_LOGI(LOG_TAG, "hurt sound pick variant=%u", (unsigned)idx);
+    return local_sound_request((local_sound_id_t)(LOCAL_SOUND_HURT_0 + idx));
+}
+
+qm_err_t hurt_sound_start_variant(uint8_t variant)
+{
+    if (variant >= LOCAL_HURT_COUNT) {
+        variant = 0;
+    }
+    QM_LOGI(LOG_TAG, "hurt sound direct variant=%u", (unsigned)variant);
+    return local_sound_request((local_sound_id_t)(LOCAL_SOUND_HURT_0 + variant));
+}
+
+qm_err_t death_sound_start(void)
+{
+    QM_LOGI(LOG_TAG, "death sound requested");
+#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+    /* 立即静音云端下行，并打断任何云端语音，防止死亡音效后立马吐出违和话语 */
+    agent_app_set_pomodoro_tts_mute(QM_TRUE);
+#endif
+    return local_sound_request(LOCAL_SOUND_DEATH);
+}
+
+qm_err_t pomodoro_start_sound_start(void)
+{
+    QM_LOGI(LOG_TAG, "pomodoro start sound requested");
+    return local_sound_request(LOCAL_SOUND_START);
 }

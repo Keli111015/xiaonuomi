@@ -78,11 +78,7 @@ static void cam_snapshot_dump(const uint8_t *frame);
 
 static void cam_enter_vision_window(void)
 {
-    if (!s_voice_paused_by_cam) {
-        s_voice_paused_by_cam = true;
-        (void)agent_app_set_resource_mode(QM_TRUE);
-        ESP_LOGI(LOG_TAG, "linear control: voice upload paused for vision");
-    }
+    /* 音频优先级高于视觉：视觉检测期间保持语音采集与上行常通，不暂停语音通道 */
 }
 
 static void cam_exit_vision_window(void)
@@ -90,7 +86,6 @@ static void cam_exit_vision_window(void)
     if (s_voice_paused_by_cam) {
         s_voice_paused_by_cam = false;
         (void)agent_app_set_resource_mode(QM_FALSE);
-        ESP_LOGI(LOG_TAG, "linear control: voice upload resumed after vision");
     }
 }
 
@@ -230,7 +225,7 @@ esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
                                      MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (s_pose_raw == NULL) return ESP_ERR_NO_MEM;
         if (xTaskCreatePinnedToCoreWithCaps(cam_pose_task, "cam_pose", 8192,
-                NULL, 5, &s_pose_task, 1, CAM_STACK_CAPS) != pdPASS) {
+                NULL, 3, &s_pose_task, 1, CAM_STACK_CAPS) != pdPASS) {
             heap_caps_free(s_pose_raw);
             s_pose_raw = NULL;
             s_pose_task = NULL;

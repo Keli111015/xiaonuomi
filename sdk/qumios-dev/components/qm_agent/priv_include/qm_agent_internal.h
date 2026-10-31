@@ -228,6 +228,8 @@ typedef struct {
     qm_bool runtime_valid;
     /** @brief Downlink bytes are currently accepted by the PUSH operation. */
     qm_bool stream_accepting;
+    /** @brief Suppress downlink TTS audio admission and enqueue when set. */
+    qm_bool downlink_muted;
     /** @brief Transport has sealed the current PUSH input. */
     qm_bool stream_finished;
     /** @brief One data-path error is waiting for control-task handling. */
@@ -623,6 +625,12 @@ int qm_agent_audio_engine_abort_stream(qm_agent_handle_t handle,
 
 /** @brief Return the current downlink generation under the audio lock. 在音频锁保护下返回当前下行 generation。 */
 uint32_t qm_agent_audio_engine_stream_generation(qm_agent_handle_t handle);
+
+/** @brief Mute or unmute downlink TTS audio frames without affecting uplink. */
+void qm_agent_audio_engine_set_downlink_muted(qm_agent_handle_t handle, qm_bool muted);
+
+/** @brief Return whether downlink TTS audio frames are currently muted. */
+qm_bool qm_agent_audio_engine_is_downlink_muted(qm_agent_handle_t handle);
 #endif
 
 /** @brief Open optional video driver resources. 打开可选视频驱动资源。 */

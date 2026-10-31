@@ -19,7 +19,7 @@
 
 typedef enum {
     MORPHCUBE_MESSAGE_POMODORO,
-    MORPHCUBE_MESSAGE_DISTRACTION,
+    MORPHCUBE_MESSAGE_CHAT,
     MORPHCUBE_MESSAGE_POSE,
 } morphcube_message_type_t;
 
@@ -77,19 +77,25 @@ static void handle_pomodoro(mc_study *study,
              event->previous_state == QM_POMODORO_STATE_FINISHED)) {
             mc_study_reset(study);
         }
+        mc_study_set_paused(study, false, monotonic_ms());
         mc_study_set_active(study,
                             event->status.state == QM_POMODORO_STATE_FOCUS &&
                             !event->status.paused);
         break;
     case QM_POMODORO_EVENT_PAUSED:
         mc_study_set_active(study, false);
+        mc_study_set_paused(study,
+                            event->status.state == QM_POMODORO_STATE_FOCUS,
+                            monotonic_ms());
         break;
     case QM_POMODORO_EVENT_RESUMED:
+        mc_study_set_paused(study, false, monotonic_ms());
         mc_study_set_active(study,
                             event->status.state == QM_POMODORO_STATE_FOCUS);
         break;
     case QM_POMODORO_EVENT_STOPPED:
     case QM_POMODORO_EVENT_FINISHED:
+        mc_study_set_paused(study, false, monotonic_ms());
         mc_study_set_active(study, false);
         break;
     case QM_POMODORO_EVENT_PHASE_DONE:
@@ -117,25 +123,46 @@ static void morphcube_study_task(void *arg)
     publish_status(&study, &pomodoro);
 
     for (;;) {
-        if (xQueueReceive(s_queue, &message, portMAX_DELAY) != pdTRUE) continue;
+        TickType_t wait_ticks = study.paused_bleeding ? pdMS_TO_TICKS(200) : portMAX_DELAY;
+        BaseType_t got = xQueueReceive(s_queue, &message, wait_ticks);
+
+        if (study.paused_bleeding && mc_study_pause_tick(&study, monotonic_ms())) {
+            QM_LOGI(LOG_TAG, "pause bleed: hp=%u.%u",
+                    (unsigned)(study.hp_tenths / 10),
+                    (unsigned)(study.hp_tenths % 10));
+            if (study.exhausted) {
+                QM_LOGI(LOG_TAG, "hp exhausted by pause bleed: play death sound");
+                (void)death_sound_start();
+            }
+            publish_status(&study, &pomodoro);
+        }
+
+        if (got != pdTRUE) continue;
 
         if (message.type == MORPHCUBE_MESSAGE_POMODORO) {
             handle_pomodoro(&study, &pomodoro, &message.pomodoro);
-        } else if (message.type == MORPHCUBE_MESSAGE_DISTRACTION) {
-            bool changed = mc_study_distraction(&study, true, monotonic_ms());
+        } else if (message.type == MORPHCUBE_MESSAGE_CHAT) {
+            bool changed = mc_study_chat_detected(&study, monotonic_ms());
             if (changed) {
-                QM_LOGI(LOG_TAG, "distraction accepted hp=%u penalties=%u",
-                        (unsigned)study.hp, (unsigned)study.penalties);
-                (void)hurt_sound_start();
+                QM_LOGI(LOG_TAG, "chat detected: hp=%u.%u penalties=%u",
+                        (unsigned)(study.hp_tenths / 10),
+                        (unsigned)(study.hp_tenths % 10),
+                        (unsigned)study.penalties);
                 if (study.exhausted) {
+                    QM_LOGI(LOG_TAG, "hp exhausted to 0: play death sound");
+                    (void)death_sound_start();
                     int ret = qm_pomodoro_pause(s_timer);
                     if (ret != QM_EOK) {
                         QM_LOGW(LOG_TAG, "pause at zero hp failed ret=%d", ret);
                     }
+                } else {
+                    (void)hurt_sound_start();
                 }
             } else {
-                QM_LOGI(LOG_TAG, "distraction ignored active=%d hp=%u",
-                        study.active, (unsigned)study.hp);
+                QM_LOGI(LOG_TAG, "chat ignored: active=%d hp=%u.%u",
+                        study.active,
+                        (unsigned)(study.hp_tenths / 10),
+                        (unsigned)(study.hp_tenths % 10));
             }
         } else if (message.type == MORPHCUBE_MESSAGE_POSE) {
             mc_pose pose;
@@ -196,12 +223,12 @@ int morphcube_study_runtime_on_pomodoro(const qm_pomodoro_event_data_t *event)
     return xQueueSend(s_queue, &message, 0) == pdTRUE ? QM_EOK : -QM_EFULL;
 }
 
-int morphcube_study_runtime_confirm_distraction(void)
+int morphcube_study_runtime_on_chat_detected(void)
 {
     morphcube_message_t message = {0};
 
     if (s_queue == NULL) return -QM_EINIT;
-    message.type = MORPHCUBE_MESSAGE_DISTRACTION;
+    message.type = MORPHCUBE_MESSAGE_CHAT;
     return xQueueSend(s_queue, &message, 0) == pdTRUE ? QM_EOK : -QM_EFULL;
 }
 
@@ -227,4 +254,21 @@ int morphcube_study_runtime_get_status(morphcube_study_status_t *out)
     *out = s_public_status;
     xSemaphoreGive(s_status_lock);
     return QM_EOK;
+}
+
+bool morphcube_study_runtime_is_focus_active(void)
+{
+    qm_pomodoro_status_t status = {0};
+    bool exhausted = false;
+
+    if (s_timer == NULL) return false;
+    if (qm_pomodoro_get_status(s_timer, &status) != QM_EOK) return false;
+    if (status.state != QM_POMODORO_STATE_FOCUS || status.paused) return false;
+
+    if (s_status_lock != NULL &&
+        xSemaphoreTake(s_status_lock, pdMS_TO_TICKS(20)) == pdTRUE) {
+        exhausted = s_public_status.exhausted;
+        xSemaphoreGive(s_status_lock);
+    }
+    return !exhausted;
 }

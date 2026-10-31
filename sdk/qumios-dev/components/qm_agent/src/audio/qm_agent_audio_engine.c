@@ -513,7 +513,7 @@ int qm_agent_audio_engine_begin_stream(qm_agent_handle_t handle,
     if (ret != QM_EOK) return ret;
 
     (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
-    if (!handle->audio.stream_accepting ||
+    if (!handle->audio.stream_accepting || handle->audio.downlink_muted ||
         handle->audio.playback_operation != QM_AUDIO_INVALID_REQUEST_ID ||
         handle->audio.playback_pending) {
         (void)qm_mutex_unlock(&handle->audio.lock);
@@ -1284,4 +1284,23 @@ void qm_agent_audio_engine_set_dialog_state(qm_agent_handle_t handle,
     refresh_upload_locked(handle);
     (void)qm_mutex_unlock(&handle->audio.lock);
     schedule_audio(handle, QM_FALSE);
+}
+
+void qm_agent_audio_engine_set_downlink_muted(qm_agent_handle_t handle, qm_bool muted)
+{
+    if (handle == NULL || !handle->audio.runtime_valid) return;
+    (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
+    handle->audio.downlink_muted = muted;
+    (void)qm_mutex_unlock(&handle->audio.lock);
+}
+
+qm_bool qm_agent_audio_engine_is_downlink_muted(qm_agent_handle_t handle)
+{
+    qm_bool muted = QM_FALSE;
+
+    if (handle == NULL || !handle->audio.runtime_valid) return QM_FALSE;
+    (void)qm_mutex_lock(&handle->audio.lock, QM_WAIT_FOREVER);
+    muted = handle->audio.downlink_muted;
+    (void)qm_mutex_unlock(&handle->audio.lock);
+    return muted;
 }

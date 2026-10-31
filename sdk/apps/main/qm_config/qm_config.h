@@ -75,7 +75,7 @@ int qm_vsnprintf(char *str, size_t count, const char *fmt, va_list ap);
 #define CONFIG_QM_AUDIO_CAPTURE_SUPPORT 1
 #define CONFIG_QM_AUDIO_CAPTURE_MODE_PULL 1
 #define CONFIG_QM_AUDIO_CAPTURE_TASK_STACK_SIZE 4096
-#define CONFIG_QM_AUDIO_CAPTURE_TASK_PRIORITY 8
+#define CONFIG_QM_AUDIO_CAPTURE_TASK_PRIORITY 14
 #define CONFIG_QM_AUDIO_CAPTURE_FRAME_BYTES 512
 #define CONFIG_QM_AUDIO_CAPTURE_QUEUE_LEN 4
 /* 播放任务里调用 opus_decode，4 KB 不够。 */
@@ -128,7 +128,7 @@ int qm_vsnprintf(char *str, size_t count, const char *fmt, va_list ap);
 #define CONFIG_QM_AGENT_ENABLE_VIDEO 0
 /* 连上 TLS 后内部堆最大连续块大约 47KB。TTS 和上传各要一块栈，32KB 放不下第二个。 */
 #define CONFIG_QM_AGENT_AUDIO_TASK_STACK_SIZE (16 * 1024)
-#define CONFIG_QM_AGENT_AUDIO_TASK_PRIORITY 8
+#define CONFIG_QM_AGENT_AUDIO_TASK_PRIORITY 14
 /* 1024 包 * 40 ms ≈ 41 秒。包体和队列都在 PSRAM，满队列大约 1.3 MB。 */
 #define CONFIG_QM_AGENT_TTS_QUEUE_LEN 1024
 #define CONFIG_QM_AGENT_TTS_PACKET_MAX_BYTES 4096

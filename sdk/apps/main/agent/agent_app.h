@@ -31,6 +31,18 @@ int agent_app_wait_tts_complete(uint32_t timeout_ms);
 /* Reserve or release the shared audio path for resource playback. */
 int agent_app_set_resource_mode(qm_bool active);
 
+/* Release any active agent downlink audio stream before playing a local sound effect, without disabling mic upload. */
+int agent_app_prepare_for_local_sound(uint32_t timeout_ms);
+
+/* Mute or unmute agent downlink TTS audio during Pomodoro focus chat penalties. */
+void agent_app_set_pomodoro_tts_mute(qm_bool muted);
+
+/* Notify agent that Pomodoro has started; play startup sound after cloud reply finishes. */
+void agent_app_notify_pomodoro_started(void);
+
+/* Check and fallback play startup sound if cloud had no voice reply. */
+void agent_app_check_pomodoro_start_sound(void);
+
 #ifdef __cplusplus
 }
 #endif

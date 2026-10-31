@@ -56,16 +56,17 @@ static void on_pomodoro_event(qm_pomodoro_t t, const qm_pomodoro_event_data_t *e
     {
     case QM_POMODORO_EVENT_TICK:
         /* Remaining time was updated. */
+        agent_app_check_pomodoro_start_sound();
         QM_LOGI(LOG_TAG, "remain=%us", (unsigned)e->status.remaining_sec);
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST && defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
-        /* 专注阶段视频流常开，每 2 秒触发一次坐姿检测 */
+        /* 专注阶段视频流常开，每 10 秒触发一次坐姿检测 */
         if (e->status.state == QM_POMODORO_STATE_FOCUS && !e->status.paused)
         {
-            if (e->status.elapsed_sec > 0 && (e->status.elapsed_sec % 2 == 0))
+            if (e->status.elapsed_sec > 0 && (e->status.elapsed_sec % 10 == 0))
             {
                 if (bsp_camera_is_available() && !agent_app_is_dialog_busy())
                 {
-                    QM_LOGI(LOG_TAG, "focus 2s tick: trigger posture check (elapsed=%us)",
+                    QM_LOGI(LOG_TAG, "focus 10s tick: trigger posture check (elapsed=%us)",
                             (unsigned)e->status.elapsed_sec);
                     (void)bsp_camera_pose_request(90, false);
                 }
@@ -73,16 +74,32 @@ static void on_pomodoro_event(qm_pomodoro_t t, const qm_pomodoro_event_data_t *e
         }
 #endif
         break;
-    case QM_POMODORO_EVENT_STATE_CHANGED:
-    case QM_POMODORO_EVENT_PAUSED:
     case QM_POMODORO_EVENT_RESUMED:
     case QM_POMODORO_EVENT_STOPPED:
     case QM_POMODORO_EVENT_FINISHED:
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
+#if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
+        pomodoro_sync_camera_stream(&e->status);
+#endif
+        break;
+    case QM_POMODORO_EVENT_STATE_CHANGED:
+        if (e->status.state == QM_POMODORO_STATE_FOCUS &&
+            (e->previous_state == QM_POMODORO_STATE_IDLE ||
+             e->previous_state == QM_POMODORO_STATE_FINISHED))
+        {
+            agent_app_notify_pomodoro_started();
+        }
+#if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
+        pomodoro_sync_camera_stream(&e->status);
+#endif
+        break;
+    case QM_POMODORO_EVENT_PAUSED:
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
         pomodoro_sync_camera_stream(&e->status);
 #endif
         break;
     case QM_POMODORO_EVENT_PHASE_DONE:
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
         if (e->previous_state == QM_POMODORO_STATE_FOCUS)
         {
@@ -196,23 +213,24 @@ static void handle_pomodoro_cloud_down(void *handle,
 
     if (strcmp(subMethod, "start") == 0)
     {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
+        agent_app_notify_pomodoro_started();
         ret = pomodoro_start();
     }
     else if (strcmp(subMethod, "stop") == 0)
     {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
         ret = pomodoro_stop();
     }
     else if (strcmp(subMethod, "pause") == 0)
     {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
         ret = pomodoro_pause();
     }
     else if (strcmp(subMethod, "resume") == 0)
     {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
         ret = pomodoro_resume();
-    }
-    else if (strcmp(subMethod, "distracted") == 0)
-    {
-        ret = morphcube_study_runtime_confirm_distraction();
     }
     else
     {
