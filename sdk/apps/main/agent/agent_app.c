@@ -2,6 +2,10 @@
 #include "ljyd_cloud.h"
 #include "qm_config.h"
 
+#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+#include "morphcube_study_runtime.h"
+#endif
+
 #if defined(CONFIG_LJYD_PLAYBACK_SUPPORT) && CONFIG_LJYD_PLAYBACK_SUPPORT
 #include "playback.h"
 #endif
@@ -21,6 +25,8 @@
 #include "qm_kernel.h"
 #include "voice.h"
 
+#include <string.h>
+
 #define LOG_TAG "agent"
 
 static qm_agent_handle_t s_agent;
@@ -39,6 +45,72 @@ static volatile int s_tts_playback_error;
 static volatile uint8_t s_tts_silent_seen;
 static volatile uint8_t s_tts_input_complete_posted;
 static volatile qm_agent_dialog_state_t s_dialog_state = QM_AGENT_DIALOG_STATE_NONE;
+
+#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+static uint8_t s_turn_asr_seen;
+static uint8_t s_turn_pomodoro_cmd;
+static uint8_t s_turn_chat_handled;
+static uint8_t s_turn_final_asr_seen;
+
+static qm_bool is_pomodoro_command_text(const char *text)
+{
+    if (text == NULL || text[0] == '\0') {
+        return QM_FALSE;
+    }
+    if (strstr(text, "番茄钟") != NULL ||
+        strstr(text, "番茄时钟") != NULL ||
+        strstr(text, "番茄") != NULL ||
+        strstr(text, "暂停") != NULL ||
+        strstr(text, "恢复") != NULL ||
+        strstr(text, "继续") != NULL ||
+        strstr(text, "退出") != NULL ||
+        strstr(text, "结束") != NULL ||
+        strstr(text, "停止") != NULL ||
+        strstr(text, "关闭") != NULL) {
+        return QM_TRUE;
+    }
+    return QM_FALSE;
+}
+
+static qm_bool is_pomodoro_status_tts(const char *text)
+{
+    if (text == NULL || text[0] == '\0') {
+        return QM_FALSE;
+    }
+    if (strstr(text, "番茄时钟已") != NULL ||
+        strstr(text, "番茄钟已") != NULL) {
+        return QM_TRUE;
+    }
+    return QM_FALSE;
+}
+
+void agent_app_set_pomodoro_tts_mute(qm_bool muted)
+{
+    if (s_agent == NULL) {
+        return;
+    }
+    qm_agent_audio_engine_set_downlink_muted(s_agent, muted);
+}
+
+static void handle_turn_asr_complete(void)
+{
+    if (s_turn_chat_handled) {
+        return;
+    }
+    s_turn_chat_handled = 1U;
+    if (!s_turn_pomodoro_cmd && morphcube_study_runtime_is_focus_active()) {
+        agent_app_set_pomodoro_tts_mute(QM_TRUE);
+        (void)morphcube_study_runtime_on_chat_detected();
+    } else {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
+    }
+}
+#else
+void agent_app_set_pomodoro_tts_mute(qm_bool muted)
+{
+    (void)muted;
+}
+#endif
 
 static void abort_tts_wait(void);
 static void on_wakeup(void); /* [MODIFIED] 前置声明：供开机连云自动唤醒调用 */
@@ -166,17 +238,58 @@ static void on_agent_event(void *event_handler_arg,
             break;
         case QM_AGENT_EVENT_DISCONNECTED:
             s_dialog_state = QM_AGENT_DIALOG_STATE_NONE;
+#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+            s_turn_asr_seen = 0U;
+            s_turn_pomodoro_cmd = 0U;
+            s_turn_chat_handled = 0U;
+            s_turn_final_asr_seen = 0U;
+            agent_app_set_pomodoro_tts_mute(QM_FALSE);
+#endif
             QM_LOGW(LOG_TAG, "agora disconnected");
             break;
         case QM_AGENT_EVENT_ASR:
             QM_LOGI(LOG_TAG, "asr final=%d text=%s",
                     notice->data.text.final,
                     notice->data.text.text);
+#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+            if ((!notice->data.text.final && s_turn_chat_handled) ||
+                (notice->data.text.final && s_turn_final_asr_seen)) {
+                s_turn_asr_seen = 0U;
+                s_turn_pomodoro_cmd = 0U;
+                s_turn_chat_handled = 0U;
+                s_turn_final_asr_seen = 0U;
+            }
+            if (notice->data.text.text[0] != '\0') {
+                s_turn_asr_seen = 1U;
+                if (is_pomodoro_command_text(notice->data.text.text)) {
+                    s_turn_pomodoro_cmd = 1U;
+                    agent_app_set_pomodoro_tts_mute(QM_FALSE);
+                } else if (!morphcube_study_runtime_is_focus_active()) {
+                    agent_app_set_pomodoro_tts_mute(QM_FALSE);
+                }
+            }
+            if (notice->data.text.final &&
+                notice->data.text.text[0] != '\0') {
+                s_turn_final_asr_seen = 1U;
+                handle_turn_asr_complete();
+            }
+#endif
             break;
         case QM_AGENT_EVENT_TTS:
             QM_LOGI(LOG_TAG, "tts final=%d text=%s",
                     notice->data.text.final,
                     notice->data.text.text);
+#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+            if (is_pomodoro_status_tts(notice->data.text.text)) {
+                s_turn_pomodoro_cmd = 1U;
+                agent_app_set_pomodoro_tts_mute(QM_FALSE);
+            } else if (!s_waiting_tts_complete &&
+                       notice->data.text.text[0] != '\0' &&
+                       morphcube_study_runtime_is_focus_active() &&
+                       !s_turn_chat_handled) {
+                handle_turn_asr_complete();
+            }
+#endif
             if (s_waiting_tts_complete && notice->data.text.text[0] != '\0') {
                 s_tts_text_seen = 1U;
                 finish_custom_tts_input_if_ready();
@@ -191,6 +304,18 @@ static void on_agent_event(void *event_handler_arg,
             s_dialog_state = notice->data.agent_state.state;
             QM_LOGI(LOG_TAG, "dialog=%s",
                     dialog_name(notice->data.agent_state.state));
+#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+            if (notice->data.agent_state.state == QM_AGENT_DIALOG_STATE_LISTENING) {
+                s_turn_asr_seen = 0U;
+                s_turn_pomodoro_cmd = 0U;
+                s_turn_chat_handled = 0U;
+                s_turn_final_asr_seen = 0U;
+            } else if ((notice->data.agent_state.state == QM_AGENT_DIALOG_STATE_THINKING ||
+                        notice->data.agent_state.state == QM_AGENT_DIALOG_STATE_SPEAKING) &&
+                       s_turn_asr_seen && !s_turn_chat_handled) {
+                handle_turn_asr_complete();
+            }
+#endif
             /* The core may re-enable upload when it reports speaking. The
              * custom-corpus transaction owns upload until its local TTS ends. */
             if (s_waiting_tts_complete && s_agent != NULL) {
@@ -534,6 +659,36 @@ int agent_app_abort_output(void)
     return ret;
 }
 
+int agent_app_prepare_for_local_sound(uint32_t timeout_ms)
+{
+    qm_agent_event_t *event;
+    uint32_t waited_ms = 0U;
+
+    if (!s_agent_started || s_agent == NULL) {
+        return QM_EOK;
+    }
+    if (qm_agent_audio_engine_stream_active(s_agent)) {
+        event = (qm_agent_event_t *)qm_malloc(sizeof(*event));
+        if (event != NULL) {
+            qm_memset(event, 0, sizeof(*event));
+            event->id = QM_AGENT_EVENT_AGENT_ABORTED;
+            event->source = QM_AGENT_EVENT_SOURCE_TRANSPORT;
+            event->code = -QM_ENOSYS;
+            (void)qm_agent_control_post_event(s_agent, event);
+        }
+        while (s_agent != NULL && qm_agent_audio_engine_stream_active(s_agent)) {
+            if (waited_ms >= timeout_ms) {
+                QM_LOGW(LOG_TAG, "wait agent audio release timeout=%u",
+                        (unsigned)timeout_ms);
+                return -QM_ETIMEOUT;
+            }
+            qm_msleep(AGENT_AUDIO_IDLE_POLL_MS);
+            waited_ms += AGENT_AUDIO_IDLE_POLL_MS;
+        }
+    }
+    return QM_EOK;
+}
+
 static const char *corpus_host_prefix(void)
 {
     switch (qm_iot_dynreg_env_get()) {
@@ -610,6 +765,7 @@ int agent_app_user_corpus(const char *text)
         return -QM_EFULL;
     }
 
+    agent_app_set_pomodoro_tts_mute(QM_FALSE);
     ret = wait_agent_audio_idle();
     if (ret != QM_EOK) {
         cJSON_free(body);
@@ -743,6 +899,11 @@ static void on_wakeup(void)
     }
 }
 
+static void on_mic_wakeup(void)
+{
+    on_wakeup();
+}
+
 /* [MODIFIED] 新增串口 CLI 唤醒命令：支持 "wake" 或 "wake <文本>" */
 #if defined(CONFIG_QM_CLI_SUPPORT) && CONFIG_QM_CLI_SUPPORT
 static void wake_cli_cmd(char *buf, int len, int argc, char **argv)
@@ -750,7 +911,7 @@ static void wake_cli_cmd(char *buf, int len, int argc, char **argv)
     (void)buf;
     (void)len;
     QM_LOGI(LOG_TAG, "CLI trigger wakeup");
-    on_wakeup();
+    on_mic_wakeup();
     if (argc > 1 && s_agent != NULL && s_agent_started) {
         /* Agora transport 不支持 qm_agent_send_text (-QM_ENOSYS)，改用 HTTP 语料接口并在结束后恢复上行 */
         if (agent_app_user_corpus(argv[1]) == QM_EOK) {
@@ -783,7 +944,7 @@ int agent_app_init(void *iot_handle)
         return ret;
     }
     ljyd_cloud_set_event_cb(on_cloud_event, NULL);
-    voice_set_wakeup_cb(on_wakeup);
+    voice_set_wakeup_cb(on_mic_wakeup);
 #if defined(CONFIG_QM_CLI_SUPPORT) && CONFIG_QM_CLI_SUPPORT
     (void)qm_cli_register_command(&s_wake_cmd);
 #endif

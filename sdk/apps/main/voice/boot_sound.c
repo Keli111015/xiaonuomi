@@ -241,9 +241,7 @@ static void boot_sound_play_once(local_sound_id_t id)
     }
 
     if (agent_app_is_active()) {
-        (void)agent_app_set_resource_mode(QM_TRUE);
-        (void)agent_app_abort_output();
-        (void)agent_app_set_resource_mode(QM_FALSE);
+        (void)agent_app_prepare_for_local_sound(600U);
     }
 
     QM_LOGI(LOG_TAG, "play %s (%u ms local)", snd->name,

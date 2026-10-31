@@ -2079,6 +2079,10 @@ static void qm_agent_transport_event_now(const qm_agent_event_t *event,
         {
             int ret;
 
+            if (qm_agent_audio_engine_is_downlink_muted(handle)) {
+                break;
+            }
+
             /* TTS requests admit their stream before calling the provider.
              * A transport such as RTC can still start a downlink without a
              * TTS_BEGIN marker; request admission asynchronously and never

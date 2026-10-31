@@ -7,26 +7,63 @@ void mc_study_reset(mc_study *s)
     if (!s) return;
     memset(s, 0, sizeof(*s));
     s->hp = 100;
+    s->hp_tenths = 1000;
 }
 
 void mc_study_set_active(mc_study *s, bool active)
 {
     if (!s) return;
     s->active = active && !s->exhausted;
+    if (s->active) {
+        s->paused_bleeding = false;
+    }
     s->has_pose = false;
     s->abnormal_ms = 0;
 }
 
-bool mc_study_distraction(mc_study *s, bool confirmed, uint64_t now)
+void mc_study_set_paused(mc_study *s, bool paused, uint64_t now)
 {
-    if (!s || !s->active || !confirmed || s->exhausted) return false;
+    if (!s) return;
+    if (paused && !s->exhausted) {
+        s->active = false;
+        s->paused_bleeding = true;
+        s->pause_tick_ms = now;
+        s->has_pose = false;
+        s->abnormal_ms = 0;
+    } else {
+        s->paused_bleeding = false;
+    }
+}
+
+bool mc_study_pause_tick(mc_study *s, uint64_t now)
+{
+    if (!s || !s->paused_bleeding || s->exhausted) return false;
+    if (now < s->pause_tick_ms || now - s->pause_tick_ms < 1000) return false;
+
+    while (now - s->pause_tick_ms >= 1000 && !s->exhausted) {
+        s->pause_tick_ms += 1000;
+        s->hp_tenths = s->hp_tenths >= 2 ? (uint16_t)(s->hp_tenths - 2) : 0;
+        s->hp = (uint8_t)(s->hp_tenths / 10);
+        if (s->hp_tenths == 0) {
+            s->exhausted = true;
+            s->paused_bleeding = false;
+        }
+    }
+    return true;
+}
+
+bool mc_study_chat_detected(mc_study *s, uint64_t now)
+{
+    if (!s || !s->active || s->exhausted) return false;
+    /* 1秒防抖：避免同一句话的重复事件在极短时间内重复扣血 */
     if (s->has_penalty &&
-        (now < s->penalty_ms || now - s->penalty_ms < 60000)) return false;
-    s->hp = s->hp >= 10 ? (uint8_t)(s->hp - 10) : 0;
+        (now < s->penalty_ms || now - s->penalty_ms < 1000)) return false;
+    s->hp_tenths = s->hp_tenths >= 100 ? (uint16_t)(s->hp_tenths - 100) : 0;
+    s->hp = (uint8_t)(s->hp_tenths / 10);
     s->penalty_ms = now;
     s->has_penalty = true;
     s->penalties++;
-    if (!s->hp) {
+    if (s->hp_tenths == 0) {
         s->exhausted = true;
         mc_study_set_active(s, false);
     }

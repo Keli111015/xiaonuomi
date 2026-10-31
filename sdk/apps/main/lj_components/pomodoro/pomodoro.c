@@ -73,16 +73,22 @@ static void on_pomodoro_event(qm_pomodoro_t t, const qm_pomodoro_event_data_t *e
         }
 #endif
         break;
-    case QM_POMODORO_EVENT_STATE_CHANGED:
-    case QM_POMODORO_EVENT_PAUSED:
     case QM_POMODORO_EVENT_RESUMED:
     case QM_POMODORO_EVENT_STOPPED:
     case QM_POMODORO_EVENT_FINISHED:
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
+#if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
+        pomodoro_sync_camera_stream(&e->status);
+#endif
+        break;
+    case QM_POMODORO_EVENT_STATE_CHANGED:
+    case QM_POMODORO_EVENT_PAUSED:
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
         pomodoro_sync_camera_stream(&e->status);
 #endif
         break;
     case QM_POMODORO_EVENT_PHASE_DONE:
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
         if (e->previous_state == QM_POMODORO_STATE_FOCUS)
         {
@@ -196,23 +202,23 @@ static void handle_pomodoro_cloud_down(void *handle,
 
     if (strcmp(subMethod, "start") == 0)
     {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
         ret = pomodoro_start();
     }
     else if (strcmp(subMethod, "stop") == 0)
     {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
         ret = pomodoro_stop();
     }
     else if (strcmp(subMethod, "pause") == 0)
     {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
         ret = pomodoro_pause();
     }
     else if (strcmp(subMethod, "resume") == 0)
     {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
         ret = pomodoro_resume();
-    }
-    else if (strcmp(subMethod, "distracted") == 0)
-    {
-        ret = morphcube_study_runtime_confirm_distraction();
     }
     else
     {
