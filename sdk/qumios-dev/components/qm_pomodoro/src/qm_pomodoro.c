@@ -31,13 +31,14 @@
 #endif
 
 #define QM_POMODORO_MAX_EVENTS_PER_STEP 3
-#define QM_POMODORO_MIN_TIMER_MS       100u
-#define QM_POMODORO_MAX_TIMER_MS       0x7fffffffu
-#define QM_POMODORO_MS_PER_SEC         1000u
-#define QM_POMODORO_DESTROY_WAIT_MS    10u
-#define QM_POMODORO_MAX_DURATION_SEC   (0xffffffffu / QM_POMODORO_MS_PER_SEC)
+#define QM_POMODORO_MIN_TIMER_MS 100u
+#define QM_POMODORO_MAX_TIMER_MS 0x7fffffffu
+#define QM_POMODORO_MS_PER_SEC 1000u
+#define QM_POMODORO_DESTROY_WAIT_MS 10u
+#define QM_POMODORO_MAX_DURATION_SEC (0xffffffffu / QM_POMODORO_MS_PER_SEC)
 
-struct qm_pomodoro {
+struct qm_pomodoro
+{
     qm_pomodoro_config_t config;
     qm_timer_t timer;
     qm_mutex_t lock;
@@ -59,7 +60,9 @@ static qm_bool qm_pomodoro_is_phase(qm_pomodoro_state_t state)
 {
     return (state == QM_POMODORO_STATE_FOCUS ||
             state == QM_POMODORO_STATE_SHORT_BREAK ||
-            state == QM_POMODORO_STATE_LONG_BREAK) ? QM_TRUE : QM_FALSE;
+            state == QM_POMODORO_STATE_LONG_BREAK)
+               ? QM_TRUE
+               : QM_FALSE;
 }
 
 static uint32_t qm_pomodoro_default_u32(uint32_t value, uint32_t fallback)
@@ -70,9 +73,12 @@ static uint32_t qm_pomodoro_default_u32(uint32_t value, uint32_t fallback)
 static void qm_pomodoro_normalize_config(qm_pomodoro_config_t *dst,
                                          const qm_pomodoro_config_t *src)
 {
-    if (src) {
+    if (src)
+    {
         *dst = *src;
-    } else {
+    }
+    else
+    {
         dst->focus_sec = 0;
         dst->short_break_sec = 0;
         dst->long_break_sec = 0;
@@ -87,16 +93,17 @@ static void qm_pomodoro_normalize_config(qm_pomodoro_config_t *dst,
     dst->single_round = dst->single_round ? QM_TRUE : CONFIG_QM_POMODORO_SINGLE_ROUND;
 
     dst->focus_sec = qm_pomodoro_default_u32(dst->focus_sec,
-                                            CONFIG_QM_POMODORO_FOCUS_SEC);
+                                             CONFIG_QM_POMODORO_FOCUS_SEC);
     dst->short_break_sec = qm_pomodoro_default_u32(dst->short_break_sec,
-                                                  CONFIG_QM_POMODORO_SHORT_BREAK_SEC);
+                                                   CONFIG_QM_POMODORO_SHORT_BREAK_SEC);
     dst->long_break_sec = qm_pomodoro_default_u32(dst->long_break_sec,
-                                                 CONFIG_QM_POMODORO_LONG_BREAK_SEC);
+                                                  CONFIG_QM_POMODORO_LONG_BREAK_SEC);
     dst->long_break_interval = qm_pomodoro_default_u32(dst->long_break_interval,
-                                                      CONFIG_QM_POMODORO_LONG_BREAK_INTERVAL);
+                                                       CONFIG_QM_POMODORO_LONG_BREAK_INTERVAL);
     dst->tick_ms = qm_pomodoro_default_u32(dst->tick_ms,
-                                          CONFIG_QM_POMODORO_TICK_MS);
-    if (dst->focus_target == 0) {
+                                           CONFIG_QM_POMODORO_TICK_MS);
+    if (dst->focus_target == 0)
+    {
         dst->focus_target = CONFIG_QM_POMODORO_FOCUS_TARGET;
     }
 }
@@ -109,7 +116,8 @@ static qm_bool qm_pomodoro_config_valid(const qm_pomodoro_config_t *config)
         config->tick_ms > QM_POMODORO_MAX_TIMER_MS ||
         config->focus_sec > QM_POMODORO_MAX_DURATION_SEC ||
         config->short_break_sec > QM_POMODORO_MAX_DURATION_SEC ||
-        config->long_break_sec > QM_POMODORO_MAX_DURATION_SEC) {
+        config->long_break_sec > QM_POMODORO_MAX_DURATION_SEC)
+    {
         return QM_FALSE;
     }
 
@@ -118,12 +126,14 @@ static qm_bool qm_pomodoro_config_valid(const qm_pomodoro_config_t *config)
 
 static int qm_pomodoro_enter(qm_pomodoro_t pomodoro)
 {
-    if (!pomodoro) {
+    if (!pomodoro)
+    {
         return -QM_EINVAL;
     }
 
     qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
-    if (pomodoro->destroying) {
+    if (pomodoro->destroying)
+    {
         qm_mutex_unlock(&pomodoro->lock);
         return -QM_EBUSY;
     }
@@ -134,12 +144,14 @@ static int qm_pomodoro_enter(qm_pomodoro_t pomodoro)
 
 static void qm_pomodoro_leave(qm_pomodoro_t pomodoro)
 {
-    if (!pomodoro) {
+    if (!pomodoro)
+    {
         return;
     }
 
     qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
-    if (pomodoro->active_ops > 0) {
+    if (pomodoro->active_ops > 0)
+    {
         pomodoro->active_ops--;
     }
     qm_mutex_unlock(&pomodoro->lock);
@@ -157,7 +169,8 @@ static qm_bool qm_pomodoro_has_active_ops(qm_pomodoro_t pomodoro)
 
 static uint32_t qm_pomodoro_ms_to_remaining_sec(uint32_t ms)
 {
-    if (ms == 0) {
+    if (ms == 0)
+    {
         return 0;
     }
 
@@ -184,7 +197,8 @@ static void qm_pomodoro_append_event_locked(qm_pomodoro_t pomodoro,
 {
     qm_pomodoro_event_data_t *item = NULL;
 
-    if (*event_count >= QM_POMODORO_MAX_EVENTS_PER_STEP) {
+    if (*event_count >= QM_POMODORO_MAX_EVENTS_PER_STEP)
+    {
         return;
     }
 
@@ -203,13 +217,15 @@ static void qm_pomodoro_dispatch_events(qm_pomodoro_t pomodoro,
 {
     int i = 0;
 
-    for (i = 0; i < event_count; i++) {
+    for (i = 0; i < event_count; i++)
+    {
         qm_pomodoro_event_cb_t event_cb;
 
         qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
         event_cb = pomodoro->destroying ? NULL : pomodoro->config.event_cb;
         qm_mutex_unlock(&pomodoro->lock);
-        if (!event_cb) {
+        if (!event_cb)
+        {
             return;
         }
         event_cb(pomodoro, &events[i]);
@@ -229,7 +245,8 @@ static void qm_pomodoro_set_phase_locked(qm_pomodoro_t pomodoro,
 
 static qm_pomodoro_state_t qm_pomodoro_next_break_state_locked(qm_pomodoro_t pomodoro)
 {
-    if ((pomodoro->completed_focus % pomodoro->config.long_break_interval) == 0) {
+    if ((pomodoro->completed_focus % pomodoro->config.long_break_interval) == 0)
+    {
         return QM_POMODORO_STATE_LONG_BREAK;
     }
 
@@ -239,11 +256,13 @@ static qm_pomodoro_state_t qm_pomodoro_next_break_state_locked(qm_pomodoro_t pom
 static uint32_t qm_pomodoro_phase_duration_locked(qm_pomodoro_t pomodoro,
                                                   qm_pomodoro_state_t state)
 {
-    if (state == QM_POMODORO_STATE_FOCUS) {
+    if (state == QM_POMODORO_STATE_FOCUS)
+    {
         return pomodoro->config.focus_sec;
     }
 
-    if (state == QM_POMODORO_STATE_LONG_BREAK) {
+    if (state == QM_POMODORO_STATE_LONG_BREAK)
+    {
         return pomodoro->config.long_break_sec;
     }
 
@@ -276,35 +295,47 @@ static void qm_pomodoro_complete_phase_locked(qm_pomodoro_t pomodoro,
     qm_pomodoro_state_t next_state = QM_POMODORO_STATE_IDLE;
     uint32_t next_duration_sec = 0;
 
-    if (!qm_pomodoro_is_phase(previous_state)) {
+    if (!qm_pomodoro_is_phase(previous_state))
+    {
         return;
     }
 
     pomodoro->remaining_ms = 0;
-    if (pomodoro->elapsed_ms < pomodoro->duration_ms) {
+    if (pomodoro->elapsed_ms < pomodoro->duration_ms)
+    {
         pomodoro->elapsed_ms = pomodoro->duration_ms;
     }
 
-    if (previous_state == QM_POMODORO_STATE_FOCUS) {
+    if (previous_state == QM_POMODORO_STATE_FOCUS)
+    {
         pomodoro->completed_focus++;
     }
     qm_pomodoro_append_event_locked(pomodoro, events, event_count,
                                     QM_POMODORO_EVENT_PHASE_DONE,
                                     previous_state);
 
-    if (previous_state == QM_POMODORO_STATE_FOCUS) {
-        if (pomodoro->config.single_round) {
+    if (previous_state == QM_POMODORO_STATE_FOCUS)
+    {
+        if (pomodoro->config.single_round)
+        {
             next_state = QM_POMODORO_STATE_SHORT_BREAK;
-        } else if (pomodoro->config.focus_target != QM_POMODORO_FOCUS_TARGET_FOREVER &&
-                   pomodoro->completed_focus >= pomodoro->config.focus_target) {
+        }
+        else if (pomodoro->config.focus_target != QM_POMODORO_FOCUS_TARGET_FOREVER &&
+                 pomodoro->completed_focus >= pomodoro->config.focus_target)
+        {
             qm_pomodoro_enter_finished_locked(pomodoro, events, event_count,
                                               previous_state, stop_timer);
             return;
-        } else {
+        }
+        else
+        {
             next_state = qm_pomodoro_next_break_state_locked(pomodoro);
         }
-    } else {
-        if (pomodoro->config.single_round) {
+    }
+    else
+    {
+        if (pomodoro->config.single_round)
+        {
             qm_pomodoro_enter_finished_locked(pomodoro, events, event_count,
                                               previous_state, stop_timer);
             return;
@@ -328,28 +359,35 @@ static void qm_pomodoro_timer_cb(qm_timer_t *timer, void *arg)
 
     (void)timer;
 
-    if (!pomodoro) {
+    if (!pomodoro)
+    {
         return;
     }
 
-    if (qm_pomodoro_enter(pomodoro) != QM_EOK) {
+    if (qm_pomodoro_enter(pomodoro) != QM_EOK)
+    {
         return;
     }
 
     qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
-    if (pomodoro->destroying || !qm_pomodoro_is_phase(pomodoro->state) || pomodoro->paused) {
+    if (pomodoro->destroying || !qm_pomodoro_is_phase(pomodoro->state) || pomodoro->paused)
+    {
         qm_mutex_unlock(&pomodoro->lock);
         qm_pomodoro_leave(pomodoro);
         return;
     }
 
-    if (pomodoro->remaining_ms > 0) {
+    if (pomodoro->remaining_ms > 0)
+    {
         /* Tick granularity does not need to divide the phase duration evenly.
          * The final tick is capped to the remaining time. */
-        if (pomodoro->remaining_ms > pomodoro->config.tick_ms) {
+        if (pomodoro->remaining_ms > pomodoro->config.tick_ms)
+        {
             pomodoro->remaining_ms -= pomodoro->config.tick_ms;
             pomodoro->elapsed_ms += pomodoro->config.tick_ms;
-        } else {
+        }
+        else
+        {
             pomodoro->elapsed_ms += pomodoro->remaining_ms;
             pomodoro->remaining_ms = 0;
         }
@@ -358,44 +396,51 @@ static void qm_pomodoro_timer_cb(qm_timer_t *timer, void *arg)
                                         pomodoro->state);
     }
 
-    if (pomodoro->remaining_ms == 0) {
+    if (pomodoro->remaining_ms == 0)
+    {
         qm_pomodoro_complete_phase_locked(pomodoro, events, &event_count,
                                           &stop_timer);
     }
     qm_mutex_unlock(&pomodoro->lock);
 
-    if (stop_timer) {
+    if (stop_timer)
+    {
         (void)qm_timer_stop(&pomodoro->timer);
     }
     qm_pomodoro_dispatch_events(pomodoro, events, event_count);
     qm_pomodoro_leave(pomodoro);
 }
 
+// 创造一个pomodoro实例
 qm_pomodoro_t qm_pomodoro_create(const qm_pomodoro_config_t *config)
 {
     qm_pomodoro_t pomodoro = NULL;
     qm_pomodoro_config_t normalized_config;
 
     qm_pomodoro_normalize_config(&normalized_config, config);
-    if (!qm_pomodoro_config_valid(&normalized_config)) {
+    if (!qm_pomodoro_config_valid(&normalized_config))
+    {
         return NULL;
     }
 
     pomodoro = (qm_pomodoro_t)qm_calloc(1, sizeof(*pomodoro));
-    if (!pomodoro) {
+    if (!pomodoro)
+    {
         return NULL;
     }
 
     pomodoro->config = normalized_config;
     pomodoro->state = QM_POMODORO_STATE_IDLE;
-    if (qm_mutex_new(&pomodoro->lock) != QM_EOK) {
+    if (qm_mutex_new(&pomodoro->lock) != QM_EOK)
+    {
         qm_free(pomodoro);
         return NULL;
     }
     pomodoro->lock_valid = QM_TRUE;
 
     if (qm_timer_new(&pomodoro->timer, qm_pomodoro_timer_cb, pomodoro,
-                     (int)pomodoro->config.tick_ms, 1) != QM_EOK) {
+                     (int)pomodoro->config.tick_ms, 1) != QM_EOK)
+    {
         qm_mutex_free(&pomodoro->lock);
         qm_free(pomodoro);
         return NULL;
@@ -407,14 +452,16 @@ qm_pomodoro_t qm_pomodoro_create(const qm_pomodoro_config_t *config)
 
 void qm_pomodoro_destroy(qm_pomodoro_t pomodoro)
 {
-    if (!pomodoro) {
+    if (!pomodoro)
+    {
         return;
     }
 
     /* Phase out new work first, then stop the timer and wait for any in-flight
      * API/timer callback that already entered the critical section. */
     qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
-    if (pomodoro->destroying) {
+    if (pomodoro->destroying)
+    {
         qm_mutex_unlock(&pomodoro->lock);
         return;
     }
@@ -422,20 +469,24 @@ void qm_pomodoro_destroy(qm_pomodoro_t pomodoro)
     pomodoro->config.event_cb = NULL;
     qm_mutex_unlock(&pomodoro->lock);
 
-    if (pomodoro->timer_valid) {
+    if (pomodoro->timer_valid)
+    {
         (void)qm_timer_stop(&pomodoro->timer);
     }
 
-    while (qm_pomodoro_has_active_ops(pomodoro)) {
+    while (qm_pomodoro_has_active_ops(pomodoro))
+    {
         (void)qm_msleep((int)QM_POMODORO_DESTROY_WAIT_MS);
     }
 
-    if (pomodoro->timer_valid) {
+    if (pomodoro->timer_valid)
+    {
         (void)qm_timer_free(&pomodoro->timer);
         pomodoro->timer_valid = QM_FALSE;
     }
 
-    if (pomodoro->lock_valid) {
+    if (pomodoro->lock_valid)
+    {
         qm_mutex_free(&pomodoro->lock);
         pomodoro->lock_valid = QM_FALSE;
     }
@@ -451,12 +502,14 @@ int qm_pomodoro_start(qm_pomodoro_t pomodoro)
     qm_pomodoro_state_t previous_state = QM_POMODORO_STATE_IDLE;
 
     ret = qm_pomodoro_enter(pomodoro);
-    if (ret != QM_EOK) {
+    if (ret != QM_EOK)
+    {
         return ret;
     }
 
     qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
-    if (qm_pomodoro_is_phase(pomodoro->state) || pomodoro->paused) {
+    if (qm_pomodoro_is_phase(pomodoro->state) || pomodoro->paused)
+    {
         qm_mutex_unlock(&pomodoro->lock);
         qm_pomodoro_leave(pomodoro);
         return -QM_EBUSY;
@@ -470,7 +523,8 @@ int qm_pomodoro_start(qm_pomodoro_t pomodoro)
                                     QM_POMODORO_EVENT_STATE_CHANGED,
                                     previous_state);
     ret = qm_timer_start(&pomodoro->timer);
-    if (ret != QM_EOK) {
+    if (ret != QM_EOK)
+    {
         pomodoro->state = previous_state;
         pomodoro->paused = QM_FALSE;
         pomodoro->remaining_ms = 0;
@@ -494,17 +548,20 @@ int qm_pomodoro_pause(qm_pomodoro_t pomodoro)
     int ret;
 
     ret = qm_pomodoro_enter(pomodoro);
-    if (ret != QM_EOK) {
+    if (ret != QM_EOK)
+    {
         return ret;
     }
 
     qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
-    if (!qm_pomodoro_is_phase(pomodoro->state)) {
+    if (!qm_pomodoro_is_phase(pomodoro->state))
+    {
         qm_mutex_unlock(&pomodoro->lock);
         qm_pomodoro_leave(pomodoro);
         return -QM_EINVAL;
     }
-    if (pomodoro->paused) {
+    if (pomodoro->paused)
+    {
         qm_mutex_unlock(&pomodoro->lock);
         qm_pomodoro_leave(pomodoro);
         return -QM_EBUSY;
@@ -529,12 +586,14 @@ int qm_pomodoro_resume(qm_pomodoro_t pomodoro)
     int ret = QM_EOK;
 
     ret = qm_pomodoro_enter(pomodoro);
-    if (ret != QM_EOK) {
+    if (ret != QM_EOK)
+    {
         return ret;
     }
 
     qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
-    if (!qm_pomodoro_is_phase(pomodoro->state) || !pomodoro->paused) {
+    if (!qm_pomodoro_is_phase(pomodoro->state) || !pomodoro->paused)
+    {
         qm_mutex_unlock(&pomodoro->lock);
         qm_pomodoro_leave(pomodoro);
         return -QM_EINVAL;
@@ -545,7 +604,8 @@ int qm_pomodoro_resume(qm_pomodoro_t pomodoro)
                                     QM_POMODORO_EVENT_RESUMED,
                                     pomodoro->state);
     ret = qm_timer_start(&pomodoro->timer);
-    if (ret != QM_EOK) {
+    if (ret != QM_EOK)
+    {
         pomodoro->paused = QM_TRUE;
         qm_mutex_unlock(&pomodoro->lock);
         qm_pomodoro_leave(pomodoro);
@@ -566,12 +626,14 @@ int qm_pomodoro_stop(qm_pomodoro_t pomodoro)
     int ret;
 
     ret = qm_pomodoro_enter(pomodoro);
-    if (ret != QM_EOK) {
+    if (ret != QM_EOK)
+    {
         return ret;
     }
 
     qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
-    if (pomodoro->state == QM_POMODORO_STATE_IDLE && !pomodoro->paused) {
+    if (pomodoro->state == QM_POMODORO_STATE_IDLE && !pomodoro->paused)
+    {
         qm_mutex_unlock(&pomodoro->lock);
         qm_pomodoro_leave(pomodoro);
         return QM_EOK;
@@ -603,17 +665,20 @@ int qm_pomodoro_skip(qm_pomodoro_t pomodoro)
     int ret;
 
     ret = qm_pomodoro_enter(pomodoro);
-    if (ret != QM_EOK) {
+    if (ret != QM_EOK)
+    {
         return ret;
     }
 
     qm_mutex_lock(&pomodoro->lock, QM_WAIT_FOREVER);
-    if (!qm_pomodoro_is_phase(pomodoro->state)) {
+    if (!qm_pomodoro_is_phase(pomodoro->state))
+    {
         qm_mutex_unlock(&pomodoro->lock);
         qm_pomodoro_leave(pomodoro);
         return -QM_EINVAL;
     }
-    if (pomodoro->paused) {
+    if (pomodoro->paused)
+    {
         qm_mutex_unlock(&pomodoro->lock);
         qm_pomodoro_leave(pomodoro);
         return -QM_EBUSY;
@@ -621,10 +686,12 @@ int qm_pomodoro_skip(qm_pomodoro_t pomodoro)
 
     qm_pomodoro_complete_phase_locked(pomodoro, events, &event_count,
                                       &stop_timer);
-    for (int i = 0; i < event_count; ++i) {
+    for (int i = 0; i < event_count; ++i)
+    {
         events[i].phase_skipped = QM_TRUE;
     }
-    if (stop_timer) {
+    if (stop_timer)
+    {
         (void)qm_timer_stop(&pomodoro->timer);
     }
     qm_mutex_unlock(&pomodoro->lock);
@@ -639,12 +706,14 @@ int qm_pomodoro_get_status(qm_pomodoro_t pomodoro,
 {
     int ret;
 
-    if (!pomodoro || !status) {
+    if (!pomodoro || !status)
+    {
         return -QM_EINVAL;
     }
 
     ret = qm_pomodoro_enter(pomodoro);
-    if (ret != QM_EOK) {
+    if (ret != QM_EOK)
+    {
         return ret;
     }
 

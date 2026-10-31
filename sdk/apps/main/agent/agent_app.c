@@ -86,16 +86,34 @@ static qm_bool is_pomodoro_command_text(const char *text)
     if (text == NULL || text[0] == '\0') {
         return QM_FALSE;
     }
-    if (strstr(text, "番茄钟") != NULL ||
-        strstr(text, "番茄时钟") != NULL ||
-        strstr(text, "番茄") != NULL ||
-        strstr(text, "暂停") != NULL ||
-        strstr(text, "恢复") != NULL ||
-        strstr(text, "继续") != NULL ||
-        strstr(text, "退出") != NULL ||
-        strstr(text, "结束") != NULL ||
-        strstr(text, "停止") != NULL ||
-        strstr(text, "关闭") != NULL) {
+    qm_bool has_obj = (strstr(text, "番茄钟") != NULL ||
+                       strstr(text, "番茄时钟") != NULL ||
+                       strstr(text, "番茄") != NULL);
+    qm_bool has_act = (strstr(text, "暂停") != NULL ||
+                       strstr(text, "恢复") != NULL ||
+                       strstr(text, "继续") != NULL ||
+                       strstr(text, "退出") != NULL ||
+                       strstr(text, "结束") != NULL ||
+                       strstr(text, "停止") != NULL ||
+                       strstr(text, "关闭") != NULL ||
+                       strstr(text, "开启") != NULL ||
+                       strstr(text, "开始") != NULL ||
+                       strstr(text, "打开") != NULL);
+
+    /* 明确带有 "番茄钟" 或 "番茄时钟" */
+    if (strstr(text, "番茄钟") != NULL || strstr(text, "番茄时钟") != NULL) {
+        return QM_TRUE;
+    }
+    /* 带有 "番茄" 且带有控制动作 (如 "暂停番茄", "结束番茄", "退出番茄") */
+    if (has_obj && has_act) {
+        return QM_TRUE;
+    }
+    /* 纯短控制动词 (全句仅为 "暂停", "恢复", "继续", "结束", "退出" 等) */
+    if (strcmp(text, "暂停") == 0 || strcmp(text, "暂停。") == 0 ||
+        strcmp(text, "恢复") == 0 || strcmp(text, "恢复。") == 0 ||
+        strcmp(text, "继续") == 0 || strcmp(text, "继续。") == 0 ||
+        strcmp(text, "结束") == 0 || strcmp(text, "结束。") == 0 ||
+        strcmp(text, "退出") == 0 || strcmp(text, "退出。") == 0) {
         return QM_TRUE;
     }
     return QM_FALSE;
@@ -128,6 +146,7 @@ static void handle_turn_asr_complete(void)
     }
     s_turn_chat_handled = 1U;
     if (!s_turn_pomodoro_cmd && morphcube_study_runtime_is_focus_active()) {
+        /* 番茄钟专注期间：只播本地扣血音效，云端这一轮回复全程静音，不向云端补发任何文本 */
         agent_app_set_pomodoro_tts_mute(QM_TRUE);
         (void)morphcube_study_runtime_on_chat_detected();
     } else {

@@ -2,6 +2,9 @@
 
 #include <string.h>
 
+#define MC_POSE_SAMPLE_GAP_MS   25000u  /* 两次不良样本之间允许的最大间隔 */
+#define MC_POSE_PENALTY_TENTHS  50u     /* 坐姿提醒扣血：5 点（单位 0.1） */
+
 void mc_study_reset(mc_study *s)
 {
     if (!s) return;
@@ -78,8 +81,9 @@ bool mc_study_pose(mc_study *s, mc_pose pose, uint64_t now)
         s->abnormal_ms = 0;
         return false;
     }
-    /* 抽样周期 2 秒；若超过 8 秒未有新的不良样本（例如中途检测跳过或恢复正常），重置累计时长 */
-    if (!s->has_pose || now < s->pose_ms || now - s->pose_ms > 8000) {
+    /* 抽样周期 10 秒（语音对话忙时会跳过一次，间隔可能到 20 秒）；
+     * 若超过 25 秒未有新的不良样本（例如中途检测跳过或恢复正常），重置累计时长 */
+    if (!s->has_pose || now < s->pose_ms || now - s->pose_ms > MC_POSE_SAMPLE_GAP_MS) {
         s->abnormal_ms = 0;
     } else {
         uint64_t dt = now - s->pose_ms;
@@ -95,5 +99,14 @@ bool mc_study_pose(mc_study *s, mc_pose pose, uint64_t now)
     s->has_notice = true;
     s->reminders++;
     s->abnormal_ms = 0;
+    /* 坐姿提醒：扣 5 点血 */
+    s->hp_tenths = s->hp_tenths >= MC_POSE_PENALTY_TENTHS
+                       ? (uint16_t)(s->hp_tenths - MC_POSE_PENALTY_TENTHS) : 0;
+    s->hp = (uint8_t)(s->hp_tenths / 10);
+    s->penalties++;
+    if (s->hp_tenths == 0) {
+        s->exhausted = true;
+        mc_study_set_active(s, false);
+    }
     return true;
 }

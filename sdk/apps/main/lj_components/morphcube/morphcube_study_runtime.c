@@ -169,8 +169,20 @@ static void morphcube_study_task(void *arg)
             bool remind = convert_pose(message.pose, &pose) &&
                           mc_study_pose(&study, pose, monotonic_ms());
             if (remind) {
-                QM_LOGI(LOG_TAG, "posture reminder count=%u pose=%d",
-                        (unsigned)study.reminders, (int)message.pose);
+                QM_LOGI(LOG_TAG, "posture reminder count=%u pose=%d hp=%u.%u",
+                        (unsigned)study.reminders, (int)message.pose,
+                        (unsigned)(study.hp_tenths / 10),
+                        (unsigned)(study.hp_tenths % 10));
+                if (study.exhausted) {
+                    QM_LOGI(LOG_TAG, "hp exhausted by posture: play death sound");
+                    (void)death_sound_start();
+                    int ret = qm_pomodoro_pause(s_timer);
+                    if (ret != QM_EOK) {
+                        QM_LOGW(LOG_TAG, "pause at zero hp failed ret=%d", ret);
+                    }
+                } else {
+                    (void)hurt_sound_start();
+                }
             }
         }
 
