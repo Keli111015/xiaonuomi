@@ -89,7 +89,7 @@ int main(void){
         (p / 'qm_types.h').write_text('#include <stdint.h>\ntypedef int qm_bool;\n')
         (p / 'qm_pomodoro.h').write_bytes((root / 'sdk/qumios-dev/components/qm_pomodoro/include/qm_pomodoro.h').read_bytes())
         runtime = (root / 'sdk/apps/main/lj_components/morphcube/morphcube_study_runtime.c').read_text(encoding='utf-8')
-        handler = runtime[runtime.index('static void handle_pomodoro('):runtime.index('static void morphcube_study_task(')]
+        handler = runtime[runtime.index('static void handle_pomodoro('):runtime.index('static void finish_exhausted_round(')]
         (p / 'event.c').write_text(r"""
 #include <assert.h>
 #include <stdbool.h>
@@ -98,7 +98,7 @@ int main(void){
 #include "qm.h"
 #include "qm_log.h"
 #include "qm_pomodoro.h"
-typedef int mc_study;
+typedef struct { bool exhausted; } mc_study;
 static int reminders;
 static uint64_t monotonic_ms(void) { return 0; }
 void mc_study_reset(mc_study *s){}
@@ -107,17 +107,20 @@ void mc_study_set_paused(mc_study*s,bool paused,uint64_t now_ms){}
 int bsp_servo_focus_reminder(void){reminders++;return 0;}
 """ + handler + r"""
 int main(void){
- mc_study study=0;qm_pomodoro_status_t status={0};
+ mc_study study={0};qm_pomodoro_status_t status={0};
  for(int event=QM_POMODORO_EVENT_STATE_CHANGED;event<=QM_POMODORO_EVENT_FINISHED;event++){
   for(int phase=QM_POMODORO_STATE_IDLE;phase<=QM_POMODORO_STATE_FINISHED;phase++){
    for(int skipped=0;skipped<=1;skipped++){
     qm_pomodoro_event_data_t e={0};e.event=event;e.previous_state=phase;e.phase_skipped=skipped;
     int before=reminders;handle_pomodoro(&study,&status,&e);
-    assert(reminders-before==(event==QM_POMODORO_EVENT_PHASE_DONE && phase==QM_POMODORO_STATE_FOCUS && !skipped));
+    assert(reminders-before==(phase==QM_POMODORO_STATE_FOCUS && ((event==QM_POMODORO_EVENT_PHASE_DONE && !skipped) || event==QM_POMODORO_EVENT_STOPPED)));
    }
   }
  }
- puts("PASS: 70 event/phase/skip combinations, including final FINISHED without duplicate reminder");
+ study.exhausted=true;
+ qm_pomodoro_event_data_t e={0};e.event=QM_POMODORO_EVENT_STOPPED;e.previous_state=QM_POMODORO_STATE_FOCUS;
+ int before=reminders;handle_pomodoro(&study,&status,&e);assert(reminders==before);
+ puts("PASS: 70 event combinations plus exhausted-stop exclusion");
 }
 """, encoding='utf-8')
         exe = p / 'event.exe'

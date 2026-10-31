@@ -95,6 +95,15 @@ static void handle_pomodoro(mc_study *study,
                             event->status.state == QM_POMODORO_STATE_FOCUS);
         break;
     case QM_POMODORO_EVENT_STOPPED:
+        /* Stop while focused (including paused focus) is an explicit finish.
+         * Exhaustion also calls stop internally; keep its own feedback only. */
+        if (event->previous_state == QM_POMODORO_STATE_FOCUS && !study->exhausted) {
+            int ret = bsp_servo_focus_reminder();
+            if (ret != QM_EOK) QM_LOGW(LOG_TAG, "stop reminder rejected ret=%d", ret);
+        }
+        mc_study_set_paused(study, false, monotonic_ms());
+        mc_study_set_active(study, false);
+        break;
     case QM_POMODORO_EVENT_FINISHED:
         mc_study_set_paused(study, false, monotonic_ms());
         mc_study_set_active(study, false);
