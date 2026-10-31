@@ -1,4 +1,10 @@
+#include "qm_config.h"
 #include "bsp_camera.h"
+
+#include "cam_debug_streamer.h"
+#if defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
+#include "vision_service.h"
+#endif
 
 #include "esp_cam_ctlr_spi.h"
 #include "esp_cam_sensor_xclk.h"
@@ -6,25 +12,16 @@
 #include "esp_log.h"
 #include "esp_video_device.h"
 #include "esp_video_init.h"
+#include "esp_video_ioctl.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
-#include "esp_vfs_dev.h"
+#include "driver/uart_vfs.h"
 #include "driver/ledc.h"
 #include "driver/spi_master.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/task.h"
-#include "qm_config.h"
-#include "qm.h"
-#include "qm_cli.h"
-#include "agent_app.h"
-#include "esp_jpeg_enc.h"
-#include "esp_timer.h"
-#if CONFIG_QM_POSE_SUPPORT
-#include "yolo11_pose.h"
-#include "morphcube_study_runtime.h"
-#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -34,6 +31,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #define LOG_TAG "bsp_camera"
@@ -57,310 +55,47 @@ typedef struct {
     bool stream_on;
 } bsp_cam_t;
 
+typedef struct {
+    bsp_cam_client_t client;
+    uint8_t *dst;
+    size_t max_len;
+    TaskHandle_t task;
+    TickType_t requested_at;
+    esp_err_t result;
+    int state; /* 0: idle, 1: requested/waiting frame, 2: captured/worker running */
+} bsp_cam_oneshot_req_t;
+
 static bsp_cam_t s_cam = {
     .fd = -1,
+    .width = 240,
+    .height = 320,
 };
-static bool s_available;
-static bool s_video_ready;
-static bool s_buffers_queued;
-static volatile bool s_stream_stop_req;
-static volatile bool s_continuous_stream;
-static volatile bool s_oneshot_stream;
-static volatile bool s_voice_paused_by_cam;
-static bool s_early_init_once;   /* UART VFS 接管与 PWDN 脉冲只能执行一次 */
-static uint32_t s_warmup_frames;
-static uint32_t s_empty_streak;
-static TaskHandle_t s_stream_task;
-static volatile bool s_snap;
-static TaskHandle_t s_snapshot_task;
-static uint8_t *s_snapshot_raw;
-static volatile bool s_snapshot_busy;
-static TickType_t s_snapshot_requested_at;
-static void cam_snapshot_dump(const uint8_t *frame);
+
+static bool s_available = false;
+static uint32_t s_queued_buffers;
+static volatile bool s_stream_stop_req = false;
+static volatile bool s_continuous_stream = false;
+static bool s_early_init_once = false;
+static uint32_t s_warmup_frames = 0;
+static TaskHandle_t s_stream_task = NULL;
+
+static portMUX_TYPE s_req_mux = portMUX_INITIALIZER_UNLOCKED;
+static bsp_cam_oneshot_req_t s_req = {0};
+
+static esp_err_t cam_video_init(void);
+static esp_err_t cam_setup_buffers(void);
+static esp_err_t cam_stream_on(void);
+static esp_err_t cam_stream_off(void);
 static esp_err_t cam_ensure_stream_task(void);
 
-static void cam_enter_vision_window(void)
+void bsp_camera_get_resolution(uint32_t *width, uint32_t *height)
 {
-    /* 音频优先级高于视觉：视觉检测期间保持语音采集与上行常通，不暂停语音通道 */
+    if (width) *width = s_cam.width;
+    if (height) *height = s_cam.height;
 }
 
-static void cam_exit_vision_window(void)
-{
-    if (s_voice_paused_by_cam) {
-        s_voice_paused_by_cam = false;
-        (void)agent_app_set_resource_mode(QM_FALSE);
-    }
-}
-
-static void snapshot_worker(void *arg)
-{
-    (void)arg;
-    for (;;) {
-        ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
-        cam_snapshot_dump(s_snapshot_raw);
-        s_snapshot_busy=false;
-        cam_exit_vision_window();
-    }
-}
-static esp_err_t snapshot_request(void)
-{
-    if (!s_available) return ESP_ERR_INVALID_STATE;
-    if (agent_app_is_dialog_busy()) {
-        ESP_LOGW(LOG_TAG, "snapshot deferred: voice dialog is active");
-        return ESP_ERR_INVALID_STATE;
-    }
-    if(s_snapshot_busy) return ESP_ERR_INVALID_STATE;
-    if(s_snapshot_task==NULL) {
-        s_snapshot_raw=heap_caps_malloc((size_t)s_cam.width*s_cam.height*2,
-                                       MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-        if(s_snapshot_raw==NULL) return ESP_ERR_NO_MEM;
-        if(xTaskCreatePinnedToCoreWithCaps(snapshot_worker,"cam_snapshot",8192,
-                NULL,2,&s_snapshot_task,0,CAM_STACK_CAPS)!=pdPASS) {
-            heap_caps_free(s_snapshot_raw);s_snapshot_raw=NULL;s_snapshot_task=NULL;
-            return ESP_ERR_NO_MEM;
-        }
-    }
-    if (cam_ensure_stream_task() != ESP_OK) {
-        return ESP_FAIL;
-    }
-    cam_enter_vision_window();
-    if (!s_continuous_stream) {
-        s_oneshot_stream = true;
-    }
-    s_snapshot_busy=true;
-    s_snapshot_requested_at=xTaskGetTickCount();
-    s_snap=true;
-    xTaskNotifyGive(s_stream_task);
-    return ESP_OK;
-}
-
-
-#if CONFIG_QM_POSE_SUPPORT
-/* One-shot diagnostic only. Copy before returning the camera DMA buffer;
- * inference runs in a low priority worker so streaming/audio can continue. */
-static TaskHandle_t s_pose_task;
-static uint8_t *s_pose_raw;
-static portMUX_TYPE s_pose_mux = portMUX_INITIALIZER_UNLOCKED;
-static int s_pose_state; /* 0 idle, 1 requested, 2 copying/running */
-static int s_pose_rotation;
-static bool s_pose_calibrate;
-static TickType_t s_pose_requested_at;
-
-/* 姿态请求的“投递 → 执行”两级拆分：
- * 调用方可能运行在 FreeRTOS 软件定时器任务里（栈仅 CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH），
- * 那里不允许做 heap_caps_malloc / xTaskCreate。所以请求方只记录参数并通知本任务，
- * 真正的分配与建任务全部在 cam_pose_req 任务上下文完成。 */
-static TaskHandle_t s_pose_req_task;
-static int s_pose_req_rotation;
-static bool s_pose_req_calibrate;
-static bool s_pose_req_pending;
-
-static void cam_pose_task(void *arg)
-{
-    (void)arg;
-    int last_rotation = -1;
-    for (;;) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        uint8_t *rgb = NULL;
-        uint16_t w = 0, h = 0;
-        yolo11_pose_frame_result_t result = {0};
-        int64_t start = esp_timer_get_time();
-        size_t bytes = (size_t)s_cam.width * s_cam.height * 2;
-        esp_err_t ret;
-        if (last_rotation != s_pose_rotation) {
-            yolo11_pose_calibration_reset();
-            last_rotation = s_pose_rotation;
-        }
-        if (s_pose_rotation == 90 || s_pose_rotation == 270) {
-            ret = yolo11_pose_uyvy_to_rgb888_cw90(s_pose_raw, bytes,
-                    s_cam.width, s_cam.height, &rgb, &w, &h);
-        } else {
-            ret = yolo11_pose_uyvy_to_rgb888(s_pose_raw, bytes,
-                    s_cam.width, s_cam.height, &rgb, &w, &h);
-        }
-        if (ret == ESP_OK && s_pose_rotation >= 180) {
-            size_t pixels = (size_t)w*h;
-            for (size_t i=0; i<pixels/2; ++i) {
-                for (int c=0; c<3; ++c) {
-                    uint8_t tmp=rgb[3*i+c];
-                    rgb[3*i+c]=rgb[3*(pixels-1-i)+c];
-                    rgb[3*(pixels-1-i)+c]=tmp;
-                }
-            }
-        }
-        if (s_pose_calibrate) yolo11_pose_calibration_reset();
-        if (ret == ESP_OK) {
-            ret = yolo11_pose_analyze_rgb888(rgb, w, h, "camera", &result);
-        }
-        /* cam calibrate restarts collection; each frame is counted only once. */
-        int calibration_count = yolo11_pose_calibration_count();
-        ESP_LOGI(LOG_TAG,
-                 "POSE_RESULT ret=%s status=%d err=%d elapsed_ms=%u rotate=%d size=%ux%u valid=%d calibrated=%d cal_count=%d",
-                 esp_err_to_name(ret), (int)result.status, (int)result.err_type,
-                 (unsigned)((esp_timer_get_time() - start) / 1000),
-                 s_pose_rotation, (unsigned)w, (unsigned)h, result.valid, result.calibrated, calibration_count);
-
-#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
-        morphcube_pose_t pose_to_report = MORPHCUBE_POSE_UNKNOWN;
-        if (ret == ESP_OK && result.valid && result.calibrated) {
-            if (result.status == YOLO11_POSE_FRAME_OK) {
-                pose_to_report = MORPHCUBE_POSE_NORMAL;
-            } else if (result.status == YOLO11_POSE_FRAME_BAD_POSTURE) {
-                if (result.err_type == YOLO11_POSE_ERR_HEAD_DOWN ||
-                    result.err_type == YOLO11_POSE_ERR_TOO_CLOSE) {
-                    pose_to_report = MORPHCUBE_POSE_HEAD_LOWERED;
-                } else {
-                    pose_to_report = MORPHCUBE_POSE_TILTED;
-                }
-            }
-        }
-        (void)morphcube_study_runtime_submit_pose(pose_to_report);
-#endif
-
-        portENTER_CRITICAL(&s_pose_mux);
-        s_pose_state = 0;
-        portEXIT_CRITICAL(&s_pose_mux);
-        cam_exit_vision_window();
-    }
-}
-
-/* 真正的请求执行：分配抓拍缓冲、按需创建推理任务、通知流任务。
- * 只在 cam_pose_req 任务上下文里被调用，绝不从定时器/中断上下文进入。 */
-static esp_err_t cam_pose_request_exec(int rotation, bool calibrate)
-{
-    if (s_pose_task == NULL) {
-        if (s_pose_raw == NULL) {
-            s_pose_raw = heap_caps_malloc((size_t)s_cam.width * s_cam.height * 2,
-                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (s_pose_raw == NULL) {
-                ESP_LOGE(LOG_TAG, "pose raw buffer alloc failed (%u bytes)",
-                         (unsigned)((size_t)s_cam.width * s_cam.height * 2));
-                return ESP_ERR_NO_MEM;
-            }
-        }
-        if (xTaskCreatePinnedToCoreWithCaps(cam_pose_task, "cam_pose", 8192,
-                NULL, 3, &s_pose_task, 1, CAM_STACK_CAPS) != pdPASS) {
-            heap_caps_free(s_pose_raw);
-            s_pose_raw = NULL;
-            s_pose_task = NULL;
-            ESP_LOGE(LOG_TAG, "cam_pose task create failed");
-            return ESP_ERR_NO_MEM;
-        }
-        ESP_LOGI(LOG_TAG, "cam_pose task in PSRAM, stack=8192");
-    }
-    if (cam_ensure_stream_task() != ESP_OK) {
-        return ESP_FAIL;
-    }
-
-    portENTER_CRITICAL(&s_pose_mux);
-    bool busy = s_pose_state != 0;
-    if (!busy) {
-        s_pose_rotation = rotation;
-        s_pose_calibrate = calibrate;
-        s_pose_requested_at = xTaskGetTickCount();
-        s_pose_state = 1;
-    }
-    portEXIT_CRITICAL(&s_pose_mux);
-    if (busy) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    cam_enter_vision_window();
-    if (!s_continuous_stream) {
-        s_oneshot_stream = true;
-    }
-    if (s_stream_task != NULL) {
-        xTaskNotifyGive(s_stream_task);
-    }
-    return ESP_OK;
-}
-
-static void cam_pose_req_task(void *arg)
-{
-    (void)arg;
-    for (;;) {
-        int rotation;
-        bool calibrate;
-        esp_err_t ret;
-
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-        portENTER_CRITICAL(&s_pose_mux);
-        rotation = s_pose_req_rotation;
-        calibrate = s_pose_req_calibrate;
-        portEXIT_CRITICAL(&s_pose_mux);
-
-        ret = cam_pose_request_exec(rotation, calibrate);
-
-        /* pending 在 exec 结束后才清零：这样“已排队未执行”的窗口也算忙，
-         * 与原来 s_pose_state==1 的语义一致，避免同一拍被连续触发两次。 */
-        portENTER_CRITICAL(&s_pose_mux);
-        s_pose_req_pending = false;
-        portEXIT_CRITICAL(&s_pose_mux);
-
-        if (ret != ESP_OK) {
-            ESP_LOGW(LOG_TAG, "pose request exec failed: %s", esp_err_to_name(ret));
-        }
-    }
-}
-
-static esp_err_t cam_ensure_pose_req_task(void)
-{
-    if (s_pose_req_task != NULL) {
-        return ESP_OK;
-    }
-    if (xTaskCreatePinnedToCoreWithCaps(cam_pose_req_task, "cam_pose_req", 4096,
-                                        NULL, 3, &s_pose_req_task, 1,
-                                        CAM_STACK_CAPS) != pdPASS) {
-        s_pose_req_task = NULL;
-        ESP_LOGE(LOG_TAG, "pose req task create failed");
-        return ESP_FAIL;
-    }
-    ESP_LOGI(LOG_TAG, "pose req task in PSRAM, stack=4096");
-    return ESP_OK;
-}
-
-/* 对外接口：任意任务上下文（含软件定时器任务）都可安全调用。
- * 这里只做参数记录与一次任务通知，不分配内存、不创建任务。 */
-esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
-{
-    bool busy;
-
-    if (!s_available) return ESP_ERR_INVALID_STATE;
-    if (s_pose_req_task == NULL) {
-        ESP_LOGW(LOG_TAG, "pose request dropped: request task not ready");
-        return ESP_ERR_INVALID_STATE;
-    }
-    if (agent_app_is_dialog_busy()) {
-        ESP_LOGW(LOG_TAG, "pose request deferred: voice dialog is active");
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    portENTER_CRITICAL(&s_pose_mux);
-    busy = (s_pose_state != 0) || s_pose_req_pending;
-    if (!busy) {
-        s_pose_req_rotation = rotation;
-        s_pose_req_calibrate = calibrate;
-        s_pose_req_pending = true;
-    }
-    portEXIT_CRITICAL(&s_pose_mux);
-    if (busy) {
-        ESP_LOGI(LOG_TAG, "pose request skipped: previous one still running");
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    xTaskNotifyGive(s_pose_req_task);
-    return ESP_OK;
-}
-#else
-esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
-{
-    (void)rotation;
-    (void)calibrate;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-#endif
-
+/* Capture ownership lives here; snapshot and inference workers live in their
+ * respective services. Do not duplicate their state or voice policy here. */
 static void cam_pwdn_hold_low(void)
 {
     gpio_config_t conf = {
@@ -398,6 +133,7 @@ static void cam_teardown(void)
         close(s_cam.fd);
         s_cam.fd = -1;
     }
+    s_queued_buffers = 0;
 }
 
 static esp_err_t cam_video_init(void)
@@ -470,6 +206,18 @@ static esp_err_t cam_setup_buffers(void)
     s_cam.pixel_format = format.fmt.pix.pixelformat;
     ESP_LOGI(LOG_TAG, "format %" PRIu32 "x%" PRIu32 " fourcc=0x%08" PRIx32,
              s_cam.width, s_cam.height, s_cam.pixel_format);
+    ESP_RETURN_ON_FALSE(s_cam.width > 0 && s_cam.height > 0 &&
+                        s_cam.pixel_format == V4L2_PIX_FMT_UYVY,
+                        ESP_ERR_NOT_SUPPORTED, LOG_TAG, "expected nonempty UYVY frames");
+
+    /* The ESP video VFS ignores O_NONBLOCK. Bound the actual driver's dequeue
+     * wait so stop/capture deadlines are checked even when the sensor stalls. */
+    struct timeval dq_timeout = {
+        .tv_sec = 0,
+        .tv_usec = CAM_DQBUF_POLL_MS * 1000,
+    };
+    ESP_RETURN_ON_ERROR(ioctl(s_cam.fd, VIDIOC_S_DQBUF_TIMEOUT, &dq_timeout) == 0 ? ESP_OK : ESP_FAIL,
+                        LOG_TAG, "setting DQBUF timeout failed, errno=%d", errno);
 
     memset(&req, 0, sizeof(req));
     req.count = CAM_BUF_NUM;
@@ -477,6 +225,8 @@ static esp_err_t cam_setup_buffers(void)
     req.memory = V4L2_MEMORY_MMAP;
     ESP_RETURN_ON_ERROR(ioctl(s_cam.fd, VIDIOC_REQBUFS, &req) == 0 ? ESP_OK : ESP_FAIL,
                         LOG_TAG, "VIDIOC_REQBUFS failed, errno=%d", errno);
+    ESP_RETURN_ON_FALSE(req.count >= CAM_BUF_NUM, ESP_ERR_NO_MEM, LOG_TAG,
+                        "insufficient capture buffers");
 
     for (int i = 0; i < CAM_BUF_NUM; i++) {
         struct v4l2_buffer buf;
@@ -487,6 +237,8 @@ static esp_err_t cam_setup_buffers(void)
         buf.index = i;
         ESP_RETURN_ON_ERROR(ioctl(s_cam.fd, VIDIOC_QUERYBUF, &buf) == 0 ? ESP_OK : ESP_FAIL,
                             LOG_TAG, "VIDIOC_QUERYBUF[%d] failed, errno=%d", i, errno);
+        ESP_RETURN_ON_FALSE(buf.length >= (size_t)s_cam.width * s_cam.height * 2,
+                            ESP_ERR_INVALID_SIZE, LOG_TAG, "capture buffer too small");
         s_cam.buffer[i] = mmap(NULL, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED,
                                s_cam.fd, buf.m.offset);
         ESP_RETURN_ON_FALSE(s_cam.buffer[i] != MAP_FAILED, ESP_ERR_NO_MEM, LOG_TAG,
@@ -494,8 +246,8 @@ static esp_err_t cam_setup_buffers(void)
         s_cam.buffer_len[i] = buf.length;
         ESP_RETURN_ON_ERROR(ioctl(s_cam.fd, VIDIOC_QBUF, &buf) == 0 ? ESP_OK : ESP_FAIL,
                             LOG_TAG, "VIDIOC_QBUF[%d] failed, errno=%d", i, errno);
+        s_queued_buffers |= 1U << i;
     }
-    s_buffers_queued = true;
 
     ESP_LOGI(LOG_TAG, "buffers ready, STREAMON deferred");
     return ESP_OK;
@@ -508,8 +260,9 @@ static esp_err_t cam_stream_on(void)
     if (s_cam.stream_on) {
         return ESP_OK;
     }
-    if (!s_buffers_queued) {
+    if (s_queued_buffers != (1U << CAM_BUF_NUM) - 1U) {
         for (int i = 0; i < CAM_BUF_NUM; i++) {
+            if (s_queued_buffers & (1U << i)) continue;
             struct v4l2_buffer buf;
             memset(&buf, 0, sizeof(buf));
             buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -517,10 +270,9 @@ static esp_err_t cam_stream_on(void)
             buf.index = i;
             ESP_RETURN_ON_ERROR(ioctl(s_cam.fd, VIDIOC_QBUF, &buf) == 0 ? ESP_OK : ESP_FAIL,
                                 LOG_TAG, "re-QBUF[%d] failed, errno=%d", i, errno);
+            s_queued_buffers |= 1U << i;
         }
-        s_buffers_queued = true;
     }
-    s_stream_stop_req = false;
     s_warmup_frames = 0;
     ESP_RETURN_ON_ERROR(ioctl(s_cam.fd, VIDIOC_STREAMON, &type) == 0 ? ESP_OK : ESP_FAIL,
                         LOG_TAG, "VIDIOC_STREAMON failed, errno=%d", errno);
@@ -534,7 +286,6 @@ static esp_err_t cam_stream_off(void)
     int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
     if (!s_cam.stream_on) {
-        s_stream_stop_req = false;
         return ESP_OK;
     }
     if (ioctl(s_cam.fd, VIDIOC_STREAMOFF, &type) != 0) {
@@ -542,117 +293,25 @@ static esp_err_t cam_stream_off(void)
         return ESP_FAIL;
     }
     s_cam.stream_on = false;
-    s_buffers_queued = false;
-    s_stream_stop_req = false;
-    s_oneshot_stream = false;
-
-#if CONFIG_QM_POSE_SUPPORT
-    bool abort_pending_pose = false;
-    portENTER_CRITICAL(&s_pose_mux);
-    if (s_pose_state == 1) {
-        s_pose_state = 0;
-        abort_pending_pose = true;
-    }
-    portEXIT_CRITICAL(&s_pose_mux);
-    if (abort_pending_pose) {
-        cam_exit_vision_window();
-    }
-#endif
-    if (s_snap) {
-        s_snap = false;
-        s_snapshot_busy = false;
-        cam_exit_vision_window();
-    }
+    s_queued_buffers = 0;
 
     ESP_LOGI(LOG_TAG, "stream off, %s", ESP_VIDEO_SPI_DEVICE_NAME);
     return ESP_OK;
 }
 
-/* JPEG-compress one UYVY frame and dump it over the debug UART as:
- *   JPEG <n>\r\n<raw jpeg bytes>\r\nJPEG_END\r\n
- * The PC side reads <n> bytes after the marker and saves them as a .jpg. */
-static void cam_snapshot_dump(const uint8_t *frame)
+/* Success and failure both retain ownership until the notified client releases
+ * it. A failed request must never silently strand a worker waiting for a frame. */
+static void cam_complete_request(esp_err_t result)
 {
-    jpeg_enc_handle_t enc = NULL;
-    const size_t in_size = s_cam.width * s_cam.height * 2;
-    const size_t out_cap = in_size + 32768;
-    uint8_t *in_buf = NULL;
-    uint8_t *out_buf = NULL;
-    int out_len = 0;
-    jpeg_enc_config_t cfg = {
-        .width = (int)s_cam.width,
-        .height = (int)s_cam.height,
-        .src_type = JPEG_PIXEL_FORMAT_CbYCrY,   /* UYVY == camera fourcc */
-        .subsampling = JPEG_SUBSAMPLE_422,
-        .quality = 45,
-        .rotate = JPEG_ROTATE_0D,
-        .task_enable = false,
-    };
-
-    if (frame == NULL) {
-        ESP_LOGE(LOG_TAG, "snapshot: null frame");
-        return;
+    TaskHandle_t target = NULL;
+    portENTER_CRITICAL(&s_req_mux);
+    if (s_req.state == 1) {
+        s_req.result = result;
+        s_req.state = 2;
+        target = s_req.task;
     }
-
-    in_buf = jpeg_calloc_align(in_size, 16);
-    out_buf = jpeg_calloc_align(out_cap, 16);
-    if (in_buf == NULL || out_buf == NULL) {
-        ESP_LOGE(LOG_TAG, "snapshot: alloc failed");
-        goto out;
-    }
-    memcpy(in_buf, frame, in_size);
-
-    if (jpeg_enc_open(&cfg, &enc) != JPEG_ERR_OK) {
-        ESP_LOGE(LOG_TAG, "snapshot: jpeg_enc_open failed");
-        goto out;
-    }
-    if (jpeg_enc_process(enc, in_buf, (int)in_size, out_buf, (int)out_cap, &out_len) != JPEG_ERR_OK) {
-        ESP_LOGE(LOG_TAG, "snapshot: jpeg_enc_process failed");
-        goto out;
-    }
-
-
-    /* ASCII chunks allow unrelated UART log lines between chunks. The receiver
-     * validates offsets, decoded size and whole-frame FNV-1a before displaying. */
-    static unsigned frame_id;
-    unsigned id = ++frame_id;
-    uint32_t hash = 2166136261u;
-    for (int i=0; i<out_len; ++i) hash=(hash^out_buf[i])*16777619u;
-    char line[256];
-    int len=snprintf(line,sizeof(line),"\r\nJPG2_BEGIN %u %u %08x\r\n",id,(unsigned)out_len,(unsigned)hash);
-    qm_dbg_write(line,len,QM_WAIT_FOREVER);
-    const char *alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    for (int off=0; off<out_len; off+=96) {
-        int n=out_len-off; if(n>96)n=96;
-        char encoded[129]; int k=0;
-        for(int j=0;j<n;j+=3) {
-            uint32_t v=(uint32_t)out_buf[off+j]<<16;
-            if(j+1<n)v|=(uint32_t)out_buf[off+j+1]<<8;
-            if(j+2<n)v|=out_buf[off+j+2];
-            encoded[k++]=alphabet[(v>>18)&63];encoded[k++]=alphabet[(v>>12)&63];
-            encoded[k++]=j+1<n?alphabet[(v>>6)&63]:'=';
-            encoded[k++]=j+2<n?alphabet[v&63]:'=';
-        }
-        encoded[k]=0;
-        len=snprintf(line,sizeof(line),"\r\nJPG2_DATA %u %u %s\r\n",id,(unsigned)off,encoded);
-        qm_dbg_write(line,len,QM_WAIT_FOREVER);
-        if (((off / 96) & 7) == 7) {
-            vTaskDelay(1);
-        }
-    }
-    len=snprintf(line,sizeof(line),"\r\nJPG2_END %u\r\n",id);
-    qm_dbg_write(line,len,QM_WAIT_FOREVER);
-
-out:
-    if (enc != NULL) {
-        jpeg_enc_close(enc);
-    }
-    if (out_buf != NULL) {
-        jpeg_free_align(out_buf);
-    }
-    if (in_buf != NULL) {
-        jpeg_free_align(in_buf);
-    }
+    portEXIT_CRITICAL(&s_req_mux);
+    if (target != NULL) xTaskNotifyGive(target);
 }
 
 static void cam_stream_task(void *arg)
@@ -668,32 +327,49 @@ static void cam_stream_task(void *arg)
 
     for (;;) {
         struct v4l2_buffer buf;
+        bool stop_requested;
+        bool req_pending;
+        bool worker_busy;
+        bool continuous;
+        bool timed_out;
+
+        portENTER_CRITICAL(&s_req_mux);
+        stop_requested = s_stream_stop_req;
+        req_pending = (s_req.state == 1);
+        worker_busy = (s_req.state == 2);
+        continuous = s_continuous_stream;
+        timed_out = req_pending &&
+            (TickType_t)(xTaskGetTickCount() - s_req.requested_at) >= pdMS_TO_TICKS(5000);
+        portEXIT_CRITICAL(&s_req_mux);
+
+        if (stop_requested || timed_out) {
+            esp_err_t off_ret = cam_stream_off();
+            cam_complete_request(timed_out ? ESP_ERR_TIMEOUT : ESP_ERR_INVALID_STATE);
+            if (stop_requested && off_ret == ESP_OK) {
+                portENTER_CRITICAL(&s_req_mux);
+                s_stream_stop_req = false; /* Also consume stop while already off. */
+                portEXIT_CRITICAL(&s_req_mux);
+            }
+            if (off_ret != ESP_OK) vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+
+        if ((worker_busy || (!continuous && !req_pending)) && s_cam.stream_on) {
+            /* Retry a failed STREAMOFF before taking more frames during inference. */
+            if (cam_stream_off() != ESP_OK) vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
 
         if (!s_cam.stream_on) {
-            bool pose_running = false;
-            bool pose_pending = false;
-#if CONFIG_QM_POSE_SUPPORT
-            portENTER_CRITICAL(&s_pose_mux);
-            pose_pending = (s_pose_state == 1);
-            pose_running = (s_pose_state == 2);
-            portEXIT_CRITICAL(&s_pose_mux);
-#endif
-            bool snap_pending = s_snap;
-            bool snap_running = s_snapshot_busy && !s_snap;
+            bool need_stream = (continuous || req_pending);
 
-            bool worker_busy = pose_running || snap_running;
-            bool need_stream = (s_continuous_stream || pose_pending || snap_pending);
-
-            if (need_stream && !s_stream_stop_req && !worker_busy) {
+            if (need_stream && !worker_busy) {
                 if (cam_stream_on() == ESP_OK) {
                     continue;
                 }
+                cam_complete_request(ESP_FAIL);
             }
             ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(50));
-            continue;
-        }
-        if (s_stream_stop_req) {
-            (void)cam_stream_off();
             continue;
         }
 
@@ -701,7 +377,7 @@ static void cam_stream_task(void *arg)
         buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         buf.memory = V4L2_MEMORY_MMAP;
         if (ioctl(s_cam.fd, VIDIOC_DQBUF, &buf) != 0) {
-            if (errno != EAGAIN && errno != EINTR) {
+            if (errno != EAGAIN && errno != EINTR && errno != ETIMEDOUT) {
                 ESP_LOGE(LOG_TAG, "VIDIOC_DQBUF failed, errno=%d", errno);
                 vTaskDelay(pdMS_TO_TICKS(1000));
             } else {
@@ -710,6 +386,15 @@ static void cam_stream_task(void *arg)
             continue;
         }
 
+        if (buf.index >= CAM_BUF_NUM || s_cam.buffer[buf.index] == NULL ||
+            buf.bytesused > s_cam.buffer_len[buf.index]) {
+            ESP_LOGE(LOG_TAG, "invalid capture buffer index=%u bytes=%u",
+                     (unsigned)buf.index, (unsigned)buf.bytesused);
+            (void)cam_stream_off();
+            cam_complete_request(ESP_FAIL);
+            continue;
+        }
+        s_queued_buffers &= ~(1U << buf.index);
         frames++;
         if (buf.bytesused == expect) {
             good++;
@@ -717,6 +402,7 @@ static void cam_stream_task(void *arg)
         } else {
             empty++;
         }
+
         if ((frames % CAM_LOG_EVERY_FRAMES) == 0) {
             TickType_t now = xTaskGetTickCount();
             uint32_t ms = (uint32_t)((now - t0) * portTICK_PERIOD_MS);
@@ -734,76 +420,50 @@ static void cam_stream_task(void *arg)
 
         bool frame_ready_for_oneshot = (s_warmup_frames >= 2);
         bool stop_after_frame = false;
+        TaskHandle_t notify_target = NULL;
+        uint8_t *copy_dst = NULL;
 
-#if CONFIG_QM_POSE_SUPPORT
-        bool take_pose = false;
-        bool pose_timed_out = false;
-        if (buf.bytesused == expect && frame_ready_for_oneshot) {
-            portENTER_CRITICAL(&s_pose_mux);
-            if (s_pose_state == 1) {
-                s_pose_state = 2;
-                take_pose = true;
+        portENTER_CRITICAL(&s_req_mux);
+        if (s_req.state == 1) {
+            if (s_stream_stop_req ||
+                (TickType_t)(xTaskGetTickCount() - s_req.requested_at) >= pdMS_TO_TICKS(5000)) {
+                s_req.result = s_stream_stop_req ? ESP_ERR_INVALID_STATE : ESP_ERR_TIMEOUT;
+                s_req.state = 2;
+                notify_target = s_req.task;
+                stop_after_frame = true;
+            } else if (buf.bytesused == expect && frame_ready_for_oneshot) {
+                if (s_req.dst && s_req.max_len >= expect) {
+                    copy_dst = s_req.dst;
+                    s_req.result = ESP_OK;
+                } else {
+                    s_req.result = ESP_ERR_INVALID_SIZE;
+                }
+                s_req.state = 2;
+                notify_target = s_req.task;
+                stop_after_frame = true;
             }
-            portEXIT_CRITICAL(&s_pose_mux);
         }
-        portENTER_CRITICAL(&s_pose_mux);
-        if (s_pose_state == 1 &&
-            (TickType_t)(xTaskGetTickCount() - s_pose_requested_at) >= pdMS_TO_TICKS(5000)) {
-            s_pose_state = 0;
-            pose_timed_out = true;
-        }
-        portEXIT_CRITICAL(&s_pose_mux);
-        if (pose_timed_out) {
-            ESP_LOGW(LOG_TAG, "POSE_RESULT ret=ESP_ERR_TIMEOUT status=3 err=0 elapsed_ms=5000 no_valid_camera_frame");
-            stop_after_frame = true;
-            cam_exit_vision_window();
-        }
-        if (take_pose) {
-            memcpy(s_pose_raw, s_cam.buffer[buf.index], expect);
-            stop_after_frame = true;
-        }
-#endif
+        if (!s_continuous_stream && s_req.state == 0) stop_after_frame = true;
+        portEXIT_CRITICAL(&s_req_mux);
 
-        bool take_snap = false;
-        if (s_snap && buf.bytesused == expect && frame_ready_for_oneshot) {
-            s_snap=false;
-            memcpy(s_snapshot_raw,s_cam.buffer[buf.index],expect);
-            take_snap = true;
-            stop_after_frame = true;
-        } else if (s_snap && (TickType_t)(xTaskGetTickCount()-s_snapshot_requested_at)>=pdMS_TO_TICKS(5000)) {
-            s_snap=false;s_snapshot_busy=false;
-            qm_cli_printf("SNAP_ERROR no_valid_camera_frame\r\n");
-            stop_after_frame = true;
-            cam_exit_vision_window();
-        }
-
-        bool need_active_stream = s_continuous_stream || s_snap;
-#if CONFIG_QM_POSE_SUPPORT
-        if (!need_active_stream) {
-            portENTER_CRITICAL(&s_pose_mux);
-            need_active_stream = (s_pose_state != 0);
-            portEXIT_CRITICAL(&s_pose_mux);
-        }
-#endif
-        if (!need_active_stream) {
-            stop_after_frame = true;
-        }
+        /* The request owns dst until its worker is notified and releases it.
+         * Copy a full frame outside the spinlock (interrupts stay enabled). */
+        if (copy_dst != NULL) memcpy(copy_dst, s_cam.buffer[buf.index], expect);
 
         if (ioctl(s_cam.fd, VIDIOC_QBUF, &buf) != 0) {
             ESP_LOGE(LOG_TAG, "VIDIOC_QBUF return failed, errno=%d", errno);
+            stop_after_frame = true; /* Rebuild the queue before more capture. */
+        } else {
+            s_queued_buffers |= 1U << buf.index;
         }
 
-        /* [MODIFIED] 线性控制：在唤醒 YOLO 推理/JPEG 压缩前先关闭 SPI 视频流，彻底释放 DMA 与中断 */
-        if (stop_after_frame || s_stream_stop_req) {
+        /* 抓拍完成后立即停流以完全释放 SPI/DMA 资源给 CPU/PSRAM 推理使用 */
+        if (stop_after_frame) {
             (void)cam_stream_off();
         }
-#if CONFIG_QM_POSE_SUPPORT
-        if (take_pose) {
-            xTaskNotifyGive(s_pose_task);
-        }
-#endif
-        if (take_snap) {
-            xTaskNotifyGive(s_snapshot_task);
+
+        if (notify_target != NULL) {
+            xTaskNotifyGive(notify_target);
         }
     }
 }
@@ -830,77 +490,64 @@ static esp_err_t cam_ensure_stream_task(void)
 
 esp_err_t bsp_camera_early_init(void)
 {
-    /* 一次性初始化：UART VFS 接管与相机 PWDN 脉冲只能执行一次。
-     * 本函数会被 main.c 与 bsp_camera_start()（cam start 命令）重复调用，
-     * 若每次都执行这两步会重复注册 VFS、重复脉冲 PWDN 并打断正在出图的相机。 */
     if (!s_early_init_once) {
         s_early_init_once = true;
-        /* Route stdio/ESP logs through the same UART driver TX mutex as CLI. */
-        esp_vfs_dev_uart_use_driver((uart_port_t)CONFIG_QM_DEBUG_UART_PORT);
+        /* Route stdio/ESP logs through UART driver */
+        uart_vfs_dev_use_driver(0);
         cam_pwdn_hold_low();
     }
 
-    if (s_available && s_video_ready) {
-        /* 已经初始化完成：直接返回，不要重做 mmap 与任务创建。 */
-        return ESP_OK;
+    if (s_available) {
+        return cam_ensure_stream_task();
     }
 
-    if (!s_video_ready) {
-        if (cam_video_init() != ESP_OK) {
-            ESP_LOGE(LOG_TAG, "esp_video_init failed (check 3V3/GND/I2C/PWDN wiring)");
-            return ESP_FAIL;
-        }
-        s_video_ready = true;
+    esp_err_t ret = cam_video_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(LOG_TAG, "cam_video_init failed, ret=%d", ret);
+        return ret;
     }
-    if (cam_setup_buffers() != ESP_OK) {
-        ESP_LOGE(LOG_TAG, "camera buffer alloc failed");
+
+    ret = cam_setup_buffers();
+    if (ret != ESP_OK) {
+        ESP_LOGE(LOG_TAG, "cam_setup_buffers failed, ret=%d", ret);
         cam_teardown();
-        return ESP_FAIL;
+        return ret;
     }
+
     s_available = true;
-    (void)cam_ensure_stream_task();
-#if CONFIG_QM_POSE_SUPPORT
-    /* 姿态请求任务必须提前建好：请求可能来自软件定时器任务，那里不能创建任务。 */
-    (void)cam_ensure_pose_req_task();
-#endif
-    ESP_LOGI(LOG_TAG, "early init ok, stream deferred");
+    ret = cam_ensure_stream_task();
+    if (ret != ESP_OK) return ret;
+    ESP_LOGI(LOG_TAG, "early init done: buffers ready in PSRAM");
     return ESP_OK;
 }
 
 esp_err_t bsp_camera_stream_start(void)
 {
     if (!s_available) {
-        ESP_LOGE(LOG_TAG, "stream_start before early_init");
         return ESP_ERR_INVALID_STATE;
     }
-    esp_err_t ret = cam_ensure_stream_task();
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    s_continuous_stream = true;
-    s_oneshot_stream = false;
-    if (cam_stream_on() != ESP_OK) {
+    if (cam_ensure_stream_task() != ESP_OK) {
         return ESP_FAIL;
     }
-    xTaskNotifyGive(s_stream_task);
+    portENTER_CRITICAL(&s_req_mux);
+    s_continuous_stream = true;
+    portEXIT_CRITICAL(&s_req_mux);
+    if (s_stream_task != NULL) {
+        xTaskNotifyGive(s_stream_task);
+    }
     return ESP_OK;
 }
 
 esp_err_t bsp_camera_stream_stop(void)
 {
+    portENTER_CRITICAL(&s_req_mux);
     s_continuous_stream = false;
-    s_oneshot_stream = false;
-    if (!s_cam.stream_on) {
-        return ESP_OK;
-    }
-    if (s_stream_task == NULL) {
-        return cam_stream_off();
-    }
     s_stream_stop_req = true;
-    for (int i = 0; i < 50 && s_cam.stream_on; i++) {
-        vTaskDelay(pdMS_TO_TICKS(10));
+    portEXIT_CRITICAL(&s_req_mux);
+    if (s_stream_task != NULL) {
+        xTaskNotifyGive(s_stream_task);
     }
-    return s_cam.stream_on ? ESP_ERR_TIMEOUT : ESP_OK;
+    return ESP_OK;
 }
 
 esp_err_t bsp_camera_start(void)
@@ -916,66 +563,83 @@ bool bsp_camera_is_available(void)
     return s_available;
 }
 
-#if CONFIG_QM_CLI_SUPPORT
-static void cam_cli(char *buf, int len, int argc, char **argv)
+bool bsp_camera_is_streaming(void)
 {
-    (void)buf;
-    (void)len;
-    if (argc == 2 && strcmp(argv[1], "status") == 0) {
-        qm_cli_printf("camera available=%d stream=%s fd=%d %ux%u fourcc=0x%08x\r\n",
-                      s_available ? 1 : 0,
-                      s_cam.stream_on ? "on" : "off",
-                      s_cam.fd, (unsigned)s_cam.width, (unsigned)s_cam.height,
-                      (unsigned)s_cam.pixel_format);
-    } else if (argc == 2 && strcmp(argv[1], "start") == 0) {
-        s_oneshot_stream = false;
-        if (bsp_camera_stream_start() == ESP_OK) {
-            qm_cli_printf("camera stream start ok\r\n");
-        } else {
-            qm_cli_printf("camera stream start failed (early_init ok? already running?)\r\n");
-        }
-    } else if (argc == 2 && strcmp(argv[1], "stop") == 0) {
-        if (bsp_camera_stream_stop() == ESP_OK) {
-            qm_cli_printf("camera stream stop ok\r\n");
-        } else {
-            qm_cli_printf("camera stream stop failed\r\n");
-        }
+    return s_cam.stream_on;
+}
 
-#if CONFIG_QM_POSE_SUPPORT
-    } else if ((argc == 2 || argc == 3) &&
-               (strcmp(argv[1], "pose") == 0 || strcmp(argv[1], "calibrate") == 0)) {
-        int rotation = 0;
-        if (argc == 3) {
-            if (strcmp(argv[2],"90")==0) rotation=90;
-            else if (strcmp(argv[2],"180")==0) rotation=180;
-            else if (strcmp(argv[2],"270")==0) rotation=270;
-            else if (strcmp(argv[2],"0")!=0) {
-                qm_cli_printf("cam pose|calibrate [0|90|180|270]\r\n"); return;
-            }
-        }
-        esp_err_t ret = bsp_camera_pose_request(rotation, strcmp(argv[1],"calibrate")==0);
-        qm_cli_printf("camera pose request: %s\r\n",esp_err_to_name(ret));
-#endif
-    } else if (argc == 2 && strcmp(argv[1], "snap") == 0) {
-        esp_err_t ret=snapshot_request();
-        qm_cli_printf("snapshot request %s\r\n",esp_err_to_name(ret));
+esp_err_t bsp_camera_request_frame(bsp_cam_client_t client, uint8_t *dst, size_t dst_size, TaskHandle_t notify_task)
+{
+    if (!s_available) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if ((client != BSP_CAM_CLIENT_POSE && client != BSP_CAM_CLIENT_SNAP) ||
+        dst == NULL || notify_task == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (dst_size < (size_t)s_cam.width * s_cam.height * 2) return ESP_ERR_INVALID_SIZE;
+    if (cam_ensure_stream_task() != ESP_OK) return ESP_FAIL;
+
+    esp_err_t ret = ESP_OK;
+    portENTER_CRITICAL(&s_req_mux);
+    if (s_req.state != 0 || s_stream_stop_req) {
+        ret = ESP_ERR_INVALID_STATE;
     } else {
-        qm_cli_printf("cam status|start|stop|snap|pose|calibrate [0|90|180|270]\r\n");
+        s_req.client = client;
+        s_req.dst = dst;
+        s_req.max_len = dst_size;
+        s_req.task = notify_task;
+        s_req.requested_at = xTaskGetTickCount();
+        s_req.result = ESP_ERR_INVALID_STATE;
+        s_req.state = 1;
+    }
+    portEXIT_CRITICAL(&s_req_mux);
+
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    if (s_stream_task != NULL) {
+        xTaskNotifyGive(s_stream_task);
+    }
+    return ESP_OK;
+}
+
+esp_err_t bsp_camera_frame_result(bsp_cam_client_t client)
+{
+    esp_err_t result = ESP_ERR_INVALID_STATE;
+    portENTER_CRITICAL(&s_req_mux);
+    if (s_req.client == client && s_req.state == 2) result = s_req.result;
+    portEXIT_CRITICAL(&s_req_mux);
+    return result;
+}
+
+void bsp_camera_release_frame(bsp_cam_client_t client)
+{
+    portENTER_CRITICAL(&s_req_mux);
+    if (s_req.client == client && s_req.state == 2) {
+        memset(&s_req, 0, sizeof(s_req));
+    }
+    portEXIT_CRITICAL(&s_req_mux);
+
+    if (s_stream_task != NULL) {
+        xTaskNotifyGive(s_stream_task);
     }
 }
 
-static const struct qm_cli_command s_cam_cmd = {
-    .name = "cam",
-    .help = "cam status|start|stop|snap|pose|calibrate [0|90|180|270] (BF3901 stream debug)",
-    .function = cam_cli,
-};
+/* 兼容性向前转发 */
+esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
+{
+#if defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
+    return vision_service_pose_request(rotation, calibrate);
+#else
+    (void)rotation;
+    (void)calibrate;
+    return ESP_ERR_NOT_SUPPORTED;
 #endif
+}
 
 int bsp_camera_cli_init(void)
 {
-#if CONFIG_QM_CLI_SUPPORT
-    return qm_cli_register_command(&s_cam_cmd);
-#else
-    return -QM_EIO;
-#endif
+    return cam_debug_cli_init();
 }

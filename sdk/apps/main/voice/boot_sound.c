@@ -301,7 +301,18 @@ static void boot_sound_task(void *arg)
         if (xSemaphoreTake(s_sem, portMAX_DELAY) != pdTRUE) {
             continue;
         }
-        boot_sound_play_once(s_req_sound);
+        /* Snapshot the request: another producer can update s_req_sound
+         * while this sound is playing. */
+        local_sound_id_t id = s_req_sound;
+        boot_sound_play_once(id);
+        if (id == LOCAL_SOUND_DEATH || s_req_sound != LOCAL_SOUND_DEATH) {
+            agent_app_set_local_feedback_mute(QM_FALSE);
+        }
+        /* The single pending request can merge/replace a death sound. Run
+         * recovery for every completion, including encoding/playback failure,
+         * so cleanup does not depend on which sound survived the merge.
+         * The agent helper preserves the mute during active focus. */
+        agent_app_restore_idle_pomodoro_tts();
     }
 }
 
@@ -333,7 +344,7 @@ static qm_err_t local_sound_request(local_sound_id_t id)
     }
 
     s_req_sound = id;
-    /* 正在播时 give 失败（二值信号量已满）= 忽略本次请求，不打断未播完的 */
+    /* 二值信号量已满时合并请求，待播项已更新为最新 id；不打断当前播放。 */
     if (xSemaphoreGive(s_sem) != pdTRUE) {
         QM_LOGD(LOG_TAG, "busy, request merged");
     }
@@ -372,12 +383,18 @@ qm_err_t hurt_sound_start_variant(uint8_t variant)
 
 qm_err_t death_sound_start(void)
 {
+    qm_err_t ret;
     QM_LOGI(LOG_TAG, "death sound requested");
 #if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
-    /* 立即静音云端下行，并打断任何云端语音，防止死亡音效后立马吐出违和话语 */
+    /* 暂时静音云端下行；音效任务退出播放后恢复非专注状态的语音。 */
+    agent_app_set_local_feedback_mute(QM_TRUE);
     agent_app_set_pomodoro_tts_mute(QM_TRUE);
 #endif
-    return local_sound_request(LOCAL_SOUND_DEATH);
+    ret = local_sound_request(LOCAL_SOUND_DEATH);
+    if (ret != QM_EOK) {
+        agent_app_set_local_feedback_mute(QM_FALSE);
+    }
+    return ret;
 }
 
 qm_err_t pomodoro_start_sound_start(void)

@@ -11,6 +11,9 @@
 #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
 #include "bsp_camera.h"
 #endif
+#if defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
+#include "vision_service.h"
+#endif
 
 #include <string.h>
 
@@ -72,7 +75,7 @@ static void on_pomodoro_event(qm_pomodoro_t t, const qm_pomodoro_event_data_t *e
                 }
                 else
                 {
-                    esp_err_t pose_ret = bsp_camera_pose_request(90, false);
+                    esp_err_t pose_ret = vision_service_pose_request(90, false);
                     if (pose_ret == ESP_OK)
                     {
                         QM_LOGI(LOG_TAG, "focus 10s tick: trigger posture check (elapsed=%us)",
@@ -229,9 +232,11 @@ static void handle_pomodoro_cloud_down(void *handle,
 
     if (strcmp(subMethod, "start") == 0)
     {
-        agent_app_set_pomodoro_tts_mute(QM_FALSE);
-        agent_app_notify_pomodoro_started();
         ret = pomodoro_start();
+        if (ret == QM_EOK)
+        {
+            agent_app_set_pomodoro_tts_mute(QM_FALSE);
+        }
     }
     else if (strcmp(subMethod, "stop") == 0)
     {

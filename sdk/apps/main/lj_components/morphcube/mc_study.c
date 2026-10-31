@@ -3,6 +3,7 @@
 #include <string.h>
 
 #define MC_POSE_SAMPLE_GAP_MS   25000u  /* 两次不良样本之间允许的最大间隔 */
+#define MC_POSE_NOTICE_MS       15000u  /* 有效不良样本链覆盖的最短墙钟时间 */
 #define MC_POSE_PENALTY_TENTHS  50u     /* 坐姿提醒扣血：5 点（单位 0.1） */
 
 void mc_study_reset(mc_study *s)
@@ -81,19 +82,19 @@ bool mc_study_pose(mc_study *s, mc_pose pose, uint64_t now)
         s->abnormal_ms = 0;
         return false;
     }
-    /* 抽样周期 10 秒（语音对话忙时会跳过一次，间隔可能到 20 秒）；
-     * 若超过 25 秒未有新的不良样本（例如中途检测跳过或恢复正常），重置累计时长 */
+    /* 抽样周期 10 秒：在相邻有效不良样本之间按实际经过时间累计。
+     * 这表示抽样证据覆盖 15 秒，并不证明未采样期间一直异常。
+     * 正常/未知样本、时钟回退或超过 25 秒的间隔会打断样本链。 */
     if (!s->has_pose || now < s->pose_ms || now - s->pose_ms > MC_POSE_SAMPLE_GAP_MS) {
         s->abnormal_ms = 0;
     } else {
         uint64_t dt = now - s->pose_ms;
-        /* Missing inference time is not evidence of continued bad posture. */
-        if (dt > 2000) dt = 2000;
-        s->abnormal_ms = s->abnormal_ms + dt > 15000 ? 15000 : s->abnormal_ms + dt;
+        s->abnormal_ms = s->abnormal_ms + dt > MC_POSE_NOTICE_MS
+                             ? MC_POSE_NOTICE_MS : s->abnormal_ms + dt;
     }
     s->has_pose = true;
     s->pose_ms = now;
-    if (s->abnormal_ms < 15000) return false;
+    if (s->abnormal_ms < MC_POSE_NOTICE_MS) return false;
     if (s->has_notice && (now < s->notice_ms || now - s->notice_ms < 60000)) return false;
     s->notice_ms = now;
     s->has_notice = true;

@@ -1,56 +1,94 @@
 # 完整工程使用说明
 
-本仓库已经内置官方基线SDK及我们的现有改动。**不再需要单独克隆Gitee仓库，也不用应用overlay。**
+适用工作树：MorphCube / 小诺米，2026-10-31 文档静态整理。所有示例从项目根目录执行，除非另有说明。本文保留构建操作供后续使用；本轮没有执行任何编译、配置生成、烧录或擦除。
 
-## 已包含
+## 工程与前置条件
 
-`sdk/apps/`完整应用、`sdk/qumios-dev/`、`sdk/components/`、`sdk/esp-idf/`（5.4.1源码）、`sdk/apps/managed_components/`现有依赖快照、模型/音频资源、原始配件文档、官方工具及许可证。共29899个受控文件，源文件约835MiB。Git下载体积取决于压缩。
+仓库内置 `sdk/apps/`、`sdk/qumios-dev/`、`sdk/esp-idf/`（5.4.1 源码）、组件、模型、音频及原始配件资料。已有源码不代表已安装 Xtensa 编译器、CMake、Ninja 和 IDF Python 环境。首次安装及组件求解可能联网。
 
-模型和第三方预编译库是构建输入，随SDK保留；个人设备固件、Flash备份、编译输出、照片、原始串口日志和真实产品密钥不在仓库中。已有ESP-IDF源码不代表编译器已安装，首次使用仍需下载工具链，组件管理器也可能访问注册表求解依赖。
+- Windows 下准备 Git for Windows 和 ESP-IDF 5.4.1 所需的 Python；确认不是 Microsoft Store 的空应用别名。
+- 项目、用户工具链目录优先使用英文、无空格的短路径，例如 `D:\dev\xiaonuomi`、`D:\esp-tools`。
+- 目标是 ESP32-S3；历史板卡为 16 MB Flash、8 MB PSRAM。
+- 日常业务修改 `sdk/apps/main/`；无需另克隆 Gitee，也无需 overlay。
+- 先阅读[当前交接](CURRENT_HANDOFF.md)：摄像头及相关业务修复尚未编译或实测，本说明不保证原样构建成功。
 
-## Windows快速开始
+## 首次配置
 
-在英文、无空格短路径克隆，例如`D:\dev\xiaonuomi`：
-
-```powershell
-git clone https://github.com/Keli111015/xiaonuomi.git
-cd xiaonuomi
-```
-
-首次安装ESP-IDF工具链（已经装好相同工具版本可复用）：
+以下是供未来操作的步骤，本轮不执行。
 
 ```powershell
+# 仅首次安装工具链时使用
 .\sdk\esp-idf\install.bat esp32s3
-. .\sdk\esp-idf\export.ps1
+
+# 每个新终端导出环境；该 SDK 脚本还会应用 ADF 补丁
+. .\sdk\export.ps1
+
+# 仅在本地配置文件尚不存在时复制，避免覆盖已有身份
+Copy-Item sdk\apps\main\cloud\ljyd_cloud_local.example.h sdk\apps\main\cloud\ljyd_cloud_local.h
 ```
 
-然后复制产品配置模板，填写各自产品的PID和密钥。宏名`SECERT`是上游拼写，不能随意改名。
+编辑 `ljyd_cloud_local.h`，填写自己的产品 PID 和密钥。`SECERT` 是上游宏名的既有拼写，不随意更名。该文件被 Git 忽略；示例占位值会被源码检查拒绝，根构建脚本本身只先检查文件是否存在。
+
+克隆代码不提供云端 Agent 配置、账号权限或设备绑定。不要改回历史文档中的旧产品，也不要把真实身份填到 README、共享配置或提交记录中。
+
+## 构建入口及副作用
+
+| 入口 | 实际作用 |
+| --- | --- |
+| `.\build_full_sdk.ps1` | 设 ADF / IDF 路径并调用 IDF 构建，只构建、不烧录 |
+| `.\build_full_sdk.ps1 -ConfigureOnly` | 调用 `idf.py reconfigure`；会生成配置和构建文件，不是只读检查 |
+| `.\sdk\export.ps1` | 导出环境并运行 ADF 补丁应用脚本，可能修改 SDK 文件 |
+| `.\sdk\build.bat` | 导出环境、构建、`flash monitor`；当前脚本没有显式整片擦除命令，但会写设备 |
+| `.\sdk\dev.bat` | 旧快捷入口，可构建、删除缓存或烧录；有本机 Python 环境路径假设 |
+| `tools/tests/test_*_host.py`、语音 guard 测试 | 调用主机 C/C++ 编译器，不是纯 Python 静态检查 |
+
+在允许构建、源码问题已处理且环境已导出的任务中，完整应用构建命令为：
 
 ```powershell
-Copy-Item sdk\apps\main\cloud\ljyd_cloud_local.example.h sdk\apps\main\cloud\ljyd_cloud_local.h
-notepad sdk\apps\main\cloud\ljyd_cloud_local.h
 .\build_full_sdk.ps1
 ```
 
-本地真实配置已被`.gitignore`排除。示例未填写会主动阻止编译。自己的云平台Agent配置和权限仍需自行准备。
+产物目录为 `sdk/apps/build/`，应用镜像名 `vb701n.bin`。当前大小、余量及哈希必须从那次实际构建重新记录，不沿用旧值。
 
-构建入口只编译，不擦除、不烧录。检查CMake配置可运行`.\build_full_sdk.ps1 -ConfigureOnly`。编译产物在`sdk/apps/build/`，不会提交。
+## VS Code 与常见环境问题
 
-不要把官方原有`build.bat`当作单纯编译命令，它可能包含擦除、烧录和串口监视。向新板烧录前先备份并核对`sdk/apps/partitions.csv`；不要对已有设备执行全片擦除。
-
-## 摄像头工具
+ESP-IDF 工程目录是 `sdk/apps/`，而 ADF 根目录是 `sdk/`，IDF 根目录是 `sdk/esp-idf/`。插件应指向这份 IDF，目标 `esp32s3`。可在已导出环境的终端中打开工程：
 
 ```powershell
-python -m pip install -r tools/camera/requirements.txt
-python tools/camera/reliable_preview.py
+code .\sdk\apps
 ```
 
-打开 http://127.0.0.1:8765，默认COM5，修改端口见工具说明。串口不能同时被监视器占用。
+| 问题 | 排查方向 |
+| --- | --- |
+| 找不到 `idf.py` 或工具链 | 当前终端是否导出正确环境，Python / Git 是否可执行 |
+| `Activation script failed` | 核对工具版本和 `IDF_TOOLS_PATH`，不要靠删除锁文件或改业务编码掩盖问题 |
+| SDK 源码缺失 | 完整恢复仓库；安装工具链不会补回缺失的源码目录 |
+| 中文路径解码错误 | 使用英文短路径，包含工具目录；不要批量转换源码编码 |
+| 依赖里有其他机器绝对路径 | 检查依赖声明与锁文件差异；不把删除 `dependencies.lock` 作为默认步骤 |
+| `dev.bat` 找不到 Python 环境 | 该脚本含 `idf5.4_py3.14_env` 假设；按实际安装配置或使用标准导出环境 |
 
-## 开发与来源
+## 烧录、分区与恢复
 
-直接修改`sdk/apps/main/`即可，原overlay现在只作为上次同步的历史快照。不要同时修改两份代码后期待自动同步。新的日常开发以`sdk/`为准。
+具体命令集中在[常见指令](../常见指令.md)。执行前确认镜像、板卡、串口、接线和现有固件备份。`idf.py flash` / `app-flash` 可能先触发构建，禁止编译时也不能运行。
 
-官方来源、基线和文件规模见[SDK_PROVENANCE.json](SDK_PROVENANCE.json)。原始SDK说明保留在[sdk/README.md](../sdk/README.md)，其中获取代码的路径是官方原文，以本文的当前工程入口为准。
+分区来源为 `sdk/apps/partitions.csv`；下表为该表的静态布局，实际操作仍核对生成的分区表与 `flash_args`。
 
-许可说明见[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)，保留各组件原有许可证和版权声明。功能验收状态见[CURRENT_HANDOFF.md](CURRENT_HANDOFF.md)。
+| 分区 | 偏移 | 大小 |
+| --- | --- | --- |
+| nvs | 0x11000 | 48 KB |
+| otadata | 0x1D000 | 8 KB |
+| phy_init | 0x1F000 | 4 KB |
+| ota_0 / ota_1 | 0x20000 / 0x410000 | 各 4032 KB |
+| model | 0x800000 | 64 KB |
+| coco_pose | 0x810000 | 3200 KB |
+| spiffs_data | 0xB30000 | 1024 KB |
+| lvgl | 0xC30000 | 3072 KB |
+
+已有匹配分区和模型时，单独更新应用通常只写应用镜像；首次上板、改分区、擦除后恢复需要核对完整镜像集合。清 NVS 会影响配网、绑定及其他 KV，不能当成无损重连。原始 Flash、日志、照片和已配置固件不上传仓库。
+
+## 日常开发与资料
+
+- 当前宏开关、启动顺序、业务分层见[应用架构](../sdk/apps/README_CN.md)。
+- 摄像头设置和已知限制见[网页工具](../tools/camera/README.md)，舵机接线见[P6 接线](SERVO_P6_WIRING.md)。
+- 历史板端验证不替代完整应用；独立测试工程见[说明](../firmware/README.md)。
+- SDK 来源及许可见[第三方说明](../THIRD_PARTY_NOTICES.md)和[来源元数据](SDK_PROVENANCE.json)。

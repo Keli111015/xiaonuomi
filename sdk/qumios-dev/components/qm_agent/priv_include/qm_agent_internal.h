@@ -228,6 +228,8 @@ typedef struct {
     qm_bool runtime_valid;
     /** @brief Downlink bytes are currently accepted by the PUSH operation. */
     qm_bool stream_accepting;
+    /** @brief A new reply/listening boundary must reopen admission after cleanup. */
+    qm_bool stream_reopen_pending;
     /** @brief Suppress downlink TTS audio admission and enqueue when set. */
     qm_bool downlink_muted;
     /** @brief Transport has sealed the current PUSH input. */

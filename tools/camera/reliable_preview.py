@@ -58,7 +58,7 @@ def run_detection(action,rotation):
         message=''
         for i in range(3):
             with lock:state['pose_result']=f'坐正保持不动，正在采集校准样本 {i+1}/3…'
-            result=pose_once('calibrate',rotation)
+            result=pose_once('calibrate' if i==0 else 'pose',rotation)
             if result.get('ret')!='ESP_OK' or result.get('valid')!='1':
                 message='校准未完成：'+describe(result);break
             count=int(result.get('cal_count','0'))

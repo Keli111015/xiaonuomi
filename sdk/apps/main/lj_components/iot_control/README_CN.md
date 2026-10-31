@@ -1,5 +1,7 @@
 # 物模型设备控制
 
+2026-10-31 按源码静态核对；本轮未编译或联调。总体入口见[文档导航](../../../../../docs/README.md)。
+
 这个目录位于 `apps/main/lj_components/iot_control`，放云端属性下发对应的设备控制。
 云连接只负责收包。有云不一定挂物模型；挂了物模型就一定要先有云 handle。
 
@@ -46,22 +48,21 @@ iot_control_on_set() 按 siid / piid 查表
 `IOT_CONTROL_VOLUME_PIID_ADJ`。
 
 增减命令到来时才读 KV。键是 `"volume"`，值和 `apps/main/voice/voice.c` 共用，范围 10..100，没有记录时用 80。
-芯片寄存器是 0..31，换算是 `音量 * 31 / 100`。
+应用向 `qm_audio_set_volume()` 提交 0..100 音量；芯片 0..31 的换算由 VB701N 设备层负责，应用控制项不直接写寄存器。
 
-芯片版本事件之后，`voice.c` 自己读同一条 KV 并调用
-`QM_AUDIO_CTRL_SET_VOLUME`。所以开机音量由语音模块写到硬件，物模型初始化
-不依赖 `qm_audio` 已经创建。
+语音启动流程中，`voice.c` 自己读同一条 KV 并调用 `qm_audio_set_volume()` 恢复音量。
+物模型控制项通过 `voice_audio_ready()` 判断能否应用硬件音量。
 
 云端改音量时，`volume_commit()` 按这个顺序做：
 
 ```text
 夹到 10..100
   -> 写入 KV "volume"
-  -> voice_get_audio() 非空则写寄存器
+  -> voice_audio_ready() 为真则调用 qm_audio_set_volume()
   -> 用 siid=2 piid=1 上报当前绝对音量
 ```
 
-`voice_get_audio()` 为空时跳过写寄存器，KV 和影子上报仍然进行。日志标签是
+`voice_audio_ready()` 为假时跳过硬件应用，KV 和影子上报仍然进行。日志标签是
 `volume`，可见 `kv load`、`VALUE set`、`ADJUST cmd`、`hw vol`、`shadow report`。
 
 增减步长是 10。未知的调节命令只打日志，不改音量。影子只上报绝对音量，

@@ -3,6 +3,7 @@
 #include "boot_sound.h"
 #include "mc_study.h"
 #include "bsp_servo.h"
+#include "ljyd_method.h"
 #include "qm.h"
 #include "qm_errno.h"
 
@@ -111,6 +112,28 @@ static void handle_pomodoro(mc_study *study,
     }
 }
 
+static void finish_exhausted_round(void)
+{
+    /* Exhaustion ends this round, including exhaustion while paused. A later
+     * start then enters FOCUS from IDLE and resets HP through STATE_CHANGED. */
+    int ret = qm_pomodoro_stop(s_timer);
+    if (ret != QM_EOK) {
+        QM_LOGW(LOG_TAG, "stop at zero hp failed ret=%d", ret);
+    } else {
+        QM_LOGI(LOG_TAG, "hp exhausted: pomodoro round stopped");
+        /* A local stop does not execute the cloud's voice-command path.
+         * Report it explicitly so the cloud can leave Pomodoro mode too.
+         * Keep this on the study task, not the timer/event callback. */
+        ret = ljyd_method_up("pomodoro", "stop", NULL);
+        if (ret != QM_EOK) {
+            QM_LOGW(LOG_TAG, "hp exhausted: cloud stop report failed ret=%d", ret);
+        } else {
+            QM_LOGI(LOG_TAG, "hp exhausted: cloud stop report sent (not acknowledged)");
+        }
+    }
+    (void)death_sound_start();
+}
+
 static void morphcube_study_task(void *arg)
 {
     mc_study study;
@@ -131,8 +154,8 @@ static void morphcube_study_task(void *arg)
                     (unsigned)(study.hp_tenths / 10),
                     (unsigned)(study.hp_tenths % 10));
             if (study.exhausted) {
-                QM_LOGI(LOG_TAG, "hp exhausted by pause bleed: play death sound");
-                (void)death_sound_start();
+                QM_LOGI(LOG_TAG, "hp exhausted by pause bleed: end round and play death sound");
+                finish_exhausted_round();
             }
             publish_status(&study, &pomodoro);
         }
@@ -149,12 +172,8 @@ static void morphcube_study_task(void *arg)
                         (unsigned)(study.hp_tenths % 10),
                         (unsigned)study.penalties);
                 if (study.exhausted) {
-                    QM_LOGI(LOG_TAG, "hp exhausted to 0: play death sound");
-                    (void)death_sound_start();
-                    int ret = qm_pomodoro_pause(s_timer);
-                    if (ret != QM_EOK) {
-                        QM_LOGW(LOG_TAG, "pause at zero hp failed ret=%d", ret);
-                    }
+                    QM_LOGI(LOG_TAG, "hp exhausted to 0: end round and play death sound");
+                    finish_exhausted_round();
                 } else {
                     (void)hurt_sound_start();
                 }
@@ -174,12 +193,8 @@ static void morphcube_study_task(void *arg)
                         (unsigned)(study.hp_tenths / 10),
                         (unsigned)(study.hp_tenths % 10));
                 if (study.exhausted) {
-                    QM_LOGI(LOG_TAG, "hp exhausted by posture: play death sound");
-                    (void)death_sound_start();
-                    int ret = qm_pomodoro_pause(s_timer);
-                    if (ret != QM_EOK) {
-                        QM_LOGW(LOG_TAG, "pause at zero hp failed ret=%d", ret);
-                    }
+                    QM_LOGI(LOG_TAG, "hp exhausted by posture: end round and play death sound");
+                    finish_exhausted_round();
                 } else {
                     (void)hurt_sound_start();
                 }
