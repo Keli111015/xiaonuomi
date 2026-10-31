@@ -6,7 +6,6 @@
 #include "qm_errno.h"
 #include "qm_log.h"
 #include "qm_string.h"
-#include "qm_work.h"
 
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
@@ -27,19 +26,23 @@
 #define PLAYBACK_WORKER_STACK      (12 * 1024)
 #define PLAYBACK_WORKER_PRIORITY   18
 #define PLAYBACK_GUIDE_TIMEOUT_MS  30000U
+#define PLAYBACK_REAP_MS           100U
 
 static qm_audio_control_t *s_control;
 static qm_audio_subscription_t s_sub;
 static qm_audio_operation_id_t s_op;
 static uint8_t s_op_live;
+static uint8_t s_release_pending;
 static qm_mutex_t s_lock;
 static uint8_t s_lock_ok;
-static qm_work_t s_finish_work;
 static qm_queue_t s_command_queue;
 static StaticTask_t s_command_tcb;
 static StackType_t *s_command_stack;
 static qm_sem_t s_command_done;
 static uint8_t s_command_ready;
+static uint8_t s_worker_stopping;
+static TaskHandle_t s_command_task;
+static uint8_t s_deinit_busy;
 
 static void playback_command_task(void *arg);
 int playback_stop(void);
@@ -93,31 +96,60 @@ static void playback_restore_audio(void)
     (void)agent_app_set_resource_mode(QM_FALSE);
 }
 
-static int release_current(void)
+/* All operation/control access is serialized by s_lock. Keep the ID until the
+ * lower layer confirms destruction; busy/timeouts are retried by the worker. */
+static int release_current_locked(qm_audio_operation_id_t id)
 {
-    qm_audio_operation_id_t id;
-
-    if (!s_lock_ok) {
-        return -QM_EINIT;
-    }
-    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
-    if (!s_op_live || s_control == NULL) {
-        qm_mutex_unlock(&s_lock);
-        return -QM_ENOENT;
-    }
-    id = s_op;
-    s_op_live = 0;
-    qm_mutex_unlock(&s_lock);
-
-    (void)qm_audio_control_release(s_control, id, 1000);
+    if (!s_op_live || s_control == NULL || s_op != id) return -QM_ENOENT;
+    s_release_pending = 1U;
+    int ret = qm_audio_control_release(s_control, id, 1000);
+    if (ret != QM_EOK) return ret;
+    s_op_live = 0U;
+    s_release_pending = 0U;
     playback_restore_audio();
     return QM_EOK;
 }
 
-static void playback_finish_work(void *arg)
+static int stop_current_locked(void)
 {
-    (void)arg;
-    (void)release_current();
+    if (!s_op_live || s_control == NULL) return -QM_ENOENT;
+    qm_audio_operation_id_t id = s_op;
+    if (s_release_pending) return release_current_locked(id);
+    qm_audio_control_snapshot_t snapshot;
+    if (qm_audio_control_get_snapshot(s_control, id, &snapshot) == QM_EOK &&
+        (snapshot.state == QM_AUDIO_CONTROL_FINISHED ||
+         snapshot.state == QM_AUDIO_CONTROL_CANCELLED ||
+         snapshot.state == QM_AUDIO_CONTROL_PREEMPTED ||
+         snapshot.state == QM_AUDIO_CONTROL_ERROR)) return release_current_locked(id);
+    int ret = qm_audio_control_stop(s_control, id, 0);
+    if (ret != QM_EOK) return ret;
+    ret = qm_audio_control_wait(s_control, id, PLAYBACK_AUDIO_WAIT_MS);
+    if (ret != QM_EOK) {
+        qm_audio_control_snapshot_t snapshot;
+        if (qm_audio_control_get_snapshot(s_control, id, &snapshot) != QM_EOK ||
+            (snapshot.state != QM_AUDIO_CONTROL_FINISHED &&
+             snapshot.state != QM_AUDIO_CONTROL_CANCELLED &&
+             snapshot.state != QM_AUDIO_CONTROL_PREEMPTED &&
+             snapshot.state != QM_AUDIO_CONTROL_ERROR)) return ret;
+    }
+    return release_current_locked(id);
+}
+
+static void reap_finished(void)
+{
+    qm_audio_control_snapshot_t snapshot;
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    if (s_control != NULL && s_op_live && s_release_pending) {
+        (void)release_current_locked(s_op);
+    } else if (s_control != NULL && s_op_live &&
+        qm_audio_control_get_snapshot(s_control, s_op, &snapshot) == QM_EOK &&
+        (snapshot.state == QM_AUDIO_CONTROL_FINISHED ||
+         snapshot.state == QM_AUDIO_CONTROL_CANCELLED ||
+         snapshot.state == QM_AUDIO_CONTROL_PREEMPTED ||
+         snapshot.state == QM_AUDIO_CONTROL_ERROR)) {
+        (void)release_current_locked(snapshot.operation_id);
+    }
+    qm_mutex_unlock(&s_lock);
 }
 
 static void playback_event(const qm_audio_event_t *event, void *user_data)
@@ -132,44 +164,40 @@ static void playback_event(const qm_audio_event_t *event, void *user_data)
             (unsigned)event->operation_id,
             (int)event->result,
             (unsigned)event->position_ms);
-    if (!s_op_live || event->operation_id != s_op) {
-        return;
-    }
-    if (event->type == QM_AUDIO_EVENT_FINISHED ||
-        event->type == QM_AUDIO_EVENT_CANCELLED ||
-        event->type == QM_AUDIO_EVENT_PREEMPTED ||
-        event->type == QM_AUDIO_EVENT_ERROR) {
-        qm_post_delayed_action(&s_finish_work, playback_finish_work, NULL, 0);
-    }
+    /* No operation mutation on the shared audio event task. The worker reads
+     * snapshots, including terminal states reached before play() returns. */
 }
 
-static void destroy_control(void)
+static int destroy_control(void)
 {
     if (s_control == NULL) {
-        return;
+        return QM_EOK;
     }
-    (void)qm_audio_control_unsubscribe(s_control, s_sub);
-    (void)qm_audio_control_shutdown(s_control, 1000);
-    (void)qm_audio_control_destroy(s_control);
+    int ret;
+    if (s_sub != NULL) {
+        ret = qm_audio_control_unsubscribe(s_control, s_sub);
+        if (ret != QM_EOK) return ret;
+        s_sub = NULL;
+    }
+    ret = qm_audio_control_shutdown(s_control, 1000);
+    if (ret != QM_EOK) return ret;
+    ret = qm_audio_control_destroy(s_control);
+    if (ret != QM_EOK) return ret;
     s_control = NULL;
     s_op_live = 0;
+    s_release_pending = 0U;
+    return QM_EOK;
 }
 
-int playback_init(void)
+static int playback_init_locked(void)
 {
     int ret;
     uint8_t queue_ready = 0U;
     uint8_t sem_created = 0U;
     uint8_t sem_ready = 0U;
 
-    if (s_control != NULL) {
+    if (s_control != NULL || s_command_task != NULL || s_deinit_busy) {
         return -QM_EBUSY;
-    }
-    if (!s_lock_ok) {
-        if (qm_mutex_new(&s_lock) != QM_EOK) {
-            return -QM_ENOMEM;
-        }
-        s_lock_ok = 1;
     }
 
     ret = qm_audio_control_create(&s_control);
@@ -177,11 +205,10 @@ int playback_init(void)
         s_control = NULL;
         return ret != QM_EOK ? ret : -QM_EINIT;
     }
+    s_sub = NULL;
     ret = qm_audio_control_subscribe(s_control, playback_event, NULL, &s_sub);
     if (ret != QM_EOK) {
-        (void)qm_audio_control_shutdown(s_control, 1000);
-        (void)qm_audio_control_destroy(s_control);
-        s_control = NULL;
+        (void)destroy_control();
         return ret;
     }
 
@@ -219,10 +246,12 @@ int playback_init(void)
             return -QM_ENOMEM;
         }
     }
-    if (xTaskCreateStatic(playback_command_task, "playback",
-                          PLAYBACK_WORKER_STACK / sizeof(StackType_t),
-                          NULL, PLAYBACK_WORKER_PRIORITY,
-                          s_command_stack, &s_command_tcb) == NULL) {
+    s_worker_stopping = 0U;
+    s_command_task = xTaskCreateStatic(playback_command_task, "playback",
+                           PLAYBACK_WORKER_STACK, /* ESP-IDF takes bytes. */
+                           NULL, PLAYBACK_WORKER_PRIORITY,
+                           s_command_stack, &s_command_tcb);
+    if (s_command_task == NULL) {
         (void)qm_sem_free(&s_command_done);
         (void)qm_queue_free(&s_command_queue);
         destroy_control();
@@ -230,6 +259,19 @@ int playback_init(void)
     }
     s_command_ready = 1U;
     return QM_EOK;
+}
+
+int playback_init(void)
+{
+    /* First initialization is performed by main before concurrent callers. */
+    if (!s_lock_ok) {
+        if (qm_mutex_new(&s_lock) != QM_EOK) return -QM_ENOMEM;
+        s_lock_ok = 1U;
+    }
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    int ret = playback_init_locked();
+    qm_mutex_unlock(&s_lock);
+    return ret;
 }
 
 static void fill_pcm_codec(qm_audio_codec_config_t *codec)
@@ -247,21 +289,31 @@ static int submit_play(const qm_audio_control_play_request_t *request)
     qm_audio_operation_id_t operation = 0;
     int ret;
 
-    if (s_control == NULL || request == NULL) {
+    if (!s_lock_ok || request == NULL) return -QM_EINIT;
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    if (s_control == NULL || !s_command_ready || s_worker_stopping) {
+        qm_mutex_unlock(&s_lock);
         return -QM_EINIT;
     }
     if (s_op_live) {
-        (void)playback_stop();
+        ret = stop_current_locked();
+        if (ret != QM_EOK) {
+            qm_mutex_unlock(&s_lock);
+            return ret;
+        }
     }
 
+    (void)agent_app_set_resource_mode(QM_TRUE);
     ret = qm_audio_control_play(s_control, request, &operation);
     if (ret != QM_EOK) {
+        playback_restore_audio();
+        qm_mutex_unlock(&s_lock);
         QM_LOGW(LOG_TAG, "play submit failed ret=%d", ret);
         return ret;
     }
-    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
     s_op = operation;
     s_op_live = 1;
+    s_release_pending = 0U;
     qm_mutex_unlock(&s_lock);
     QM_LOGI(LOG_TAG, "play submitted operation=%u", (unsigned)operation);
     return QM_EOK;
@@ -274,9 +326,8 @@ static void process_cloud_command(playback_cloud_command_t *command)
     if (command == NULL) {
         return;
     }
-    if (s_op_live) {
-        (void)playback_stop();
-    }
+    ret = playback_stop();
+    if (ret != QM_EOK && ret != -QM_ENOENT) return;
     (void)agent_app_abort_output();
 
     if (command->guide_words != NULL) {
@@ -286,23 +337,19 @@ static void process_cloud_command(playback_cloud_command_t *command)
         }
         if (ret != QM_EOK) {
             QM_LOGW(LOG_TAG, "guide words failed ret=%d", ret);
-            (void)agent_app_set_resource_mode(QM_FALSE);
             return;
         }
         QM_LOGI(LOG_TAG, "guide words playback complete");
     }
 
     if (command->url == NULL || command->url[0] == '\0') {
-        (void)agent_app_set_resource_mode(QM_FALSE);
         return;
     }
-    (void)agent_app_set_resource_mode(QM_TRUE);
     ret = playback_play_url(command->url,
                             command->file_size,
                             command->duration_s);
     if (ret != QM_EOK) {
         QM_LOGW(LOG_TAG, "resource play failed ret=%d", ret);
-        (void)agent_app_set_resource_mode(QM_FALSE);
     }
 }
 
@@ -313,25 +360,34 @@ static void playback_command_task(void *arg)
         playback_cloud_command_t *command = NULL;
         unsigned int size = sizeof(command);
 
+        qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+        uint8_t stopping = s_worker_stopping;
+        qm_mutex_unlock(&s_lock);
+        if (stopping) break;
+        reap_finished();
         if (qm_queue_recv(&s_command_queue, &command, &size,
-                          QM_WAIT_FOREVER) != QM_EOK) {
+                          PLAYBACK_REAP_MS) != QM_EOK) {
             continue;
         }
         if (command == NULL) {
             break;
         }
-        process_cloud_command(command);
+        qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+        stopping = s_worker_stopping;
+        qm_mutex_unlock(&s_lock);
+        if (!stopping) process_cloud_command(command);
         free_cloud_command(command);
     }
     (void)qm_sem_signal(&s_command_done);
-    vTaskDelete(NULL);
+    /* The owner joins before deleting this task and reusing its static TCB. */
+    vTaskSuspend(NULL);
 }
 
 int playback_submit_cloud_play(const playback_cloud_play_request_t *request)
 {
     playback_cloud_command_t *command;
 
-    if (!s_command_ready || request == NULL || request->url == NULL ||
+    if (!s_lock_ok || request == NULL || request->url == NULL ||
         request->url[0] == '\0') {
         return -QM_EINVAL;
     }
@@ -351,8 +407,8 @@ int playback_submit_cloud_play(const playback_cloud_play_request_t *request)
     command->file_size = request->file_size;
     command->duration_s = request->duration_s;
     if (command->url == NULL || command->audio_type == NULL ||
-        (request->guide_words != NULL && command->guide_words == NULL) ||
-        (request->title != NULL && command->title == NULL)) {
+        (request->guide_words != NULL && request->guide_words[0] != '\0' && command->guide_words == NULL) ||
+        (request->title != NULL && request->title[0] != '\0' && command->title == NULL)) {
         free_cloud_command(command);
         return -QM_ENOMEM;
     }
@@ -361,7 +417,11 @@ int playback_submit_cloud_play(const playback_cloud_play_request_t *request)
             (unsigned)command->file_size,
             (unsigned)command->duration_s,
             command->guide_words != NULL ? 1U : 0U);
-    if (qm_queue_send(&s_command_queue, &command, sizeof(command)) != QM_EOK) {
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    int queued = s_command_ready && !s_worker_stopping &&
+        qm_queue_send(&s_command_queue, &command, sizeof(command)) == QM_EOK;
+    qm_mutex_unlock(&s_lock);
+    if (!queued) {
         free_cloud_command(command);
         return -QM_EBUSY;
     }
@@ -604,92 +664,109 @@ int playback_download(const qm_res_mgr_resource_t *resource,
 }
 #endif
 
-static int copy_live_op(qm_audio_operation_id_t *id)
+/* Called with the application lock held; callers keep it through the API call
+ * so a concurrent stop/deinit cannot release the operation/control underneath. */
+static int live_op_locked(void)
 {
-    if (s_control == NULL || !s_lock_ok) {
-        return -QM_EINIT;
-    }
-    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
-    if (!s_op_live) {
-        qm_mutex_unlock(&s_lock);
-        return -QM_ENOENT;
-    }
-    *id = s_op;
-    qm_mutex_unlock(&s_lock);
+    if (s_control == NULL || s_worker_stopping) return -QM_EINIT;
+    if (!s_op_live) return -QM_ENOENT;
+    if (s_release_pending) return -QM_EBUSY;
     return QM_EOK;
 }
 
 int playback_pause(void)
 {
-    qm_audio_operation_id_t id;
-    int ret = copy_live_op(&id);
-
-    if (ret != QM_EOK) {
-        return ret;
-    }
-    return qm_audio_control_pause(s_control, id, QM_AUDIO_PAUSE_HOLD_OUTPUT);
+    if (!s_lock_ok) return -QM_EINIT;
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    int ret = live_op_locked();
+    if (ret == QM_EOK)
+        ret = qm_audio_control_pause(s_control, s_op, QM_AUDIO_PAUSE_HOLD_OUTPUT);
+    qm_mutex_unlock(&s_lock);
+    return ret;
 }
 
 int playback_resume(void)
 {
-    qm_audio_operation_id_t id;
-    int ret = copy_live_op(&id);
-
-    if (ret != QM_EOK) {
-        return ret;
-    }
-    return qm_audio_control_resume(s_control, id);
+    if (!s_lock_ok) return -QM_EINIT;
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    int ret = live_op_locked();
+    if (ret == QM_EOK) ret = qm_audio_control_resume(s_control, s_op);
+    qm_mutex_unlock(&s_lock);
+    return ret;
 }
 
 int playback_stop(void)
 {
-    qm_audio_operation_id_t id;
-    int ret = copy_live_op(&id);
-
-    if (ret != QM_EOK) {
-        return ret;
-    }
-    ret = qm_audio_control_stop(s_control, id, 0);
-    if (ret == QM_EOK) {
-        (void)qm_audio_control_wait(s_control, id, PLAYBACK_AUDIO_WAIT_MS);
-    }
-    (void)release_current();
+    if (!s_lock_ok) return -QM_EINIT;
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    int ret = s_control != NULL ? stop_current_locked() : -QM_EINIT;
+    qm_mutex_unlock(&s_lock);
     return ret;
 }
 
 int playback_get_status(qm_audio_control_snapshot_t *status)
 {
-    qm_audio_operation_id_t id;
     int ret;
 
     if (status == NULL) {
         return -QM_EINVAL;
     }
-    ret = copy_live_op(&id);
-    if (ret != QM_EOK) {
-        return ret;
-    }
-    return qm_audio_control_get_snapshot(s_control, id, status);
+    if (!s_lock_ok) return -QM_EINIT;
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    ret = live_op_locked();
+    if (ret == QM_EOK) ret = qm_audio_control_get_snapshot(s_control, s_op, status);
+    qm_mutex_unlock(&s_lock);
+    return ret;
 }
 
 int playback_deinit(void)
 {
-    int ret;
-
-    if (s_command_ready) {
-        playback_cloud_command_t *stop = NULL;
-
-        ret = qm_queue_send(&s_command_queue, &stop, sizeof(stop));
-        if (ret != QM_EOK ||
-            qm_sem_wait(&s_command_done, PLAYBACK_GUIDE_TIMEOUT_MS) != QM_EOK) {
+    int ret = QM_EOK;
+    if (!s_lock_ok) return QM_EOK;
+    qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+    if (s_deinit_busy) {
+        qm_mutex_unlock(&s_lock);
+        return -QM_EBUSY;
+    }
+    s_deinit_busy = 1U;
+    s_worker_stopping = 1U;
+    s_command_ready = 0U;
+    if (s_command_task != NULL) {
+        qm_mutex_unlock(&s_lock);
+        ret = qm_sem_wait(&s_command_done, PLAYBACK_GUIDE_TIMEOUT_MS + PLAYBACK_AUDIO_WAIT_MS);
+        qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
+        if (ret != QM_EOK) {
+            s_deinit_busy = 0U;
+            qm_mutex_unlock(&s_lock);
             QM_LOGW(LOG_TAG, "command worker stop timeout ret=%d", ret);
             return -QM_ETIMEOUT;
         }
+        /* The semaphore can wake this core before the worker has suspended on
+         * the other core. Reusing its static TCB before that is unsafe. */
+        TickType_t joined_at = xTaskGetTickCount();
+        while (eTaskGetState(s_command_task) != eSuspended) {
+            if ((TickType_t)(xTaskGetTickCount() - joined_at) >= pdMS_TO_TICKS(1000)) {
+                (void)qm_sem_signal(&s_command_done); /* Preserve retryability. */
+                s_deinit_busy = 0U;
+                qm_mutex_unlock(&s_lock);
+                return -QM_ETIMEOUT;
+            }
+            vTaskDelay(1);
+        }
+        vTaskDelete(s_command_task);
+        s_command_task = NULL;
+        playback_cloud_command_t *command = NULL;
+        unsigned int size = sizeof(command);
+        while (qm_queue_recv(&s_command_queue, &command, &size, 0) == QM_EOK) {
+            free_cloud_command(command);
+            size = sizeof(command);
+        }
         (void)qm_queue_free(&s_command_queue);
         (void)qm_sem_free(&s_command_done);
-        s_command_ready = 0U;
     }
-    (void)playback_stop();
-    destroy_control();
-    return QM_EOK;
+    if (s_op_live) ret = stop_current_locked();
+    if (ret == QM_EOK) ret = destroy_control();
+    s_deinit_busy = 0U;
+    qm_mutex_unlock(&s_lock);
+    return ret;
 }

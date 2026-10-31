@@ -1,7 +1,11 @@
-# SDK本机辅助脚本
+# SDK 本机辅助脚本
 
-保留现有开发环境的构建/串口代码。`_idf.py`、`_build_cam.py`默认引用`D:/heikesong/...`工具路径，其他同学需修改路径或使用官方导出的ESP-IDF终端。
+2026-10-31 按脚本静态整理。此目录保留特定开发机器上的辅助代码，不是通用工程入口。环境和构建统一见[使用说明](../../docs/FULL_REPOSITORY.md)，命令见[速查](../../常见指令.md)。
 
-`_serial_monitor.py`默认COM5，包含硬件重启，不能与预览同时占用串口。串口日志可能含设备信息，不要直接上传。
+| 脚本 | 前提及副作用 |
+| --- | --- |
+| `_idf.py`、`_build_cam.py` | 含 `D:/heikesong/...` 本机工具路径，会调用构建工具；其他机器先检查路径，禁止编译时不运行 |
+| `_serial_monitor.py` | 默认 COM5 / 115200，会硬复位设备，随后发送 `cam status` / `cam start`，采集约 18 秒；不是被动监视器 |
+| `legacy/_cam_snap.py` | 旧 JPEG 协议参考，不适配当前 JPG2 |
 
-`legacy/_cam_snap.py`仅供历史参考，不适配JPG2固件；当前请用`tools/camera/reliable_preview.py`。
+当前预览使用[摄像头工具](../camera/README.md)，其默认串口是 COM4，与这里不同。一个串口不能同时被两个工具占用。日志可能含设备信息，不直接上传。本轮未运行这些脚本。

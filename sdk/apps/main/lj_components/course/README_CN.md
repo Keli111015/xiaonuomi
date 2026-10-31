@@ -1,5 +1,6 @@
 # 课程表（ljyd_course）
 
+2026-10-31 按源码静态更新；本轮未编译或联调。总体入口见[文档导航](../../../../../docs/README.md)。
 
 ## 文件
 
@@ -14,7 +15,7 @@
 | 位置 | 调用 |
 | --- | --- |
 | `apps/main/main.c` | `ljyd_course_init(ljyd_cloud_get_handle())`，位于 `ljyd_cloud_init()` 之后、`agent_app_init()` 之前 |
-| `apps/main/cloud/ljyd_provision.c` | `ljyd_provision_clear_and_reboot()` 开头调用 `ljyd_course_clear_configs()` |
+| `apps/main/cloud/ljyd_provision.c` | clear-and-reboot 流程调用 `ljyd_course_clear_configs()` 后重启 |
 | `apps/main/CMakeLists.txt` | 编译 `./lj_components/course/ljyd_course.c`，并加入 `./lj_components/course` 头文件目录 |
 
 ## 存储格式
@@ -40,9 +41,9 @@ typedef struct {
    （`weekday` / `period` / `subject` / `textbook`），全量覆盖并写 Flash，
    回复 `course/syncAck`，同时置“已更新”标志
    （`ljyd_course_take_update_flag()` 读取并清除）。
-4. **恢复出厂**：`ljyd_course_clear_configs()` 清空内存并删除 `course_cfg`。
-   云端 RESET 最终走 `ljyd_provision_clear_and_reboot()`，GPIO 复位也走同一函数，
-   因此清理逻辑放在该函数内，保证两条路径都能清干净。
+4. **清理接口**：`ljyd_course_clear_configs()` 清空内存并尝试删除 `course_cfg`。
+   `ljyd_provision_clear_and_reboot()` 在更新绑定标记、删除云环境和 Wi-Fi 配置后调用它，
+   然后重启。删除返回值仅写日志，持久化失败和重启后的行为仍需设备端验收。
 
 端侧是**被动接收端**，不会主动向云端请求课表。
 
@@ -63,10 +64,10 @@ int n = ljyd_course_get_day_entries(3, today, LJYD_COURSE_MAX_ENTRIES); /* 周�
 - 本仓库没有 `mode_manager` 的 40 s 定时器，不在 `main.c` 里自动排程，
   由业务代码调用（例如语音唤醒流程）。
 - 未同步、云端未就绪、本地时间无效时直接跳过。
-- **本地时间**：当前 `CONFIG_QM_IOT_NTP_SUPPORT=0`，没有 SNTP 对时，
-  未对时日期为 1970；`ljyd_course_get_today_weekday()` 只判断
-  `qm_localtime()` 是否为空，1970 年也会返回“周四”。因此播报前额外要求
-  本地年份 ≥ `LJYD_COURSE_MIN_VALID_YEAR`（2024）。需要真正可用时请先接入对时。
+- **本地时间**：播报前要求本地年份 ≥ `LJYD_COURSE_MIN_VALID_YEAR`（2024）。
+  不能只凭 `CONFIG_QM_IOT_NTP_SUPPORT` 推断无对时：当前应用另有 `cloud/time_sync.c`，
+  云连接时调用 `time_sync_start()`。实际对时成功、时区及播报日期仍需联调，不能把
+  `qm_localtime()` 非空当作时间已正确。
 
 ## 与 WSL `eye_jj` 分支的差异
 

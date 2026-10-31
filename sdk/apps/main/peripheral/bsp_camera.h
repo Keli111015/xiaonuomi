@@ -59,7 +59,7 @@ esp_err_t bsp_camera_early_init(void);
 esp_err_t bsp_camera_stream_start(void);
 
 /**
- * @brief 停止视频流并释放 DMA
+ * @brief 异步请求停流；返回表示请求已提交，实际 DMA 停止由相机任务完成
  */
 esp_err_t bsp_camera_stream_stop(void);
 
@@ -88,9 +88,14 @@ void bsp_camera_get_resolution(uint32_t *width, uint32_t *height);
  * @param client 请求客户端类型（姿态或快照）
  * @param dst 目的缓冲区指针
  * @param dst_size 目的缓冲区大小
- * @param notify_task 帧就绪后接收 TaskNotify 的目标任务句柄
+ * @param notify_task 请求完成（包括失败/取消）后接收 TaskNotify 的任务句柄
+ * @note 返回 ESP_OK 后保留 dst 和任务的生命周期，直到通知后读取结果并 release。
+ *       返回错误表示请求未接收，不会通知。仅在收到通知后读取或释放请求。
  */
 esp_err_t bsp_camera_request_frame(bsp_cam_client_t client, uint8_t *dst, size_t dst_size, TaskHandle_t notify_task);
+
+/** Read completion status after notification, before releasing the request. */
+esp_err_t bsp_camera_frame_result(bsp_cam_client_t client);
 
 /**
  * @brief 客户端处理完毕后释放抓拍锁，通知相机驱动回到就绪状态

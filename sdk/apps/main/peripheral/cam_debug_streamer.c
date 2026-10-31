@@ -23,7 +23,9 @@
 
 static TaskHandle_t s_snapshot_task = NULL;
 static uint8_t *s_snapshot_raw = NULL;
-static volatile bool s_snapshot_busy = false;
+static size_t s_snapshot_capacity;
+static bool s_snapshot_busy = false;
+static portMUX_TYPE s_snapshot_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static void cam_snapshot_dump(const uint8_t *frame)
 {
@@ -121,9 +123,13 @@ static void snapshot_worker(void *arg)
     for (;;) {
         uint32_t val = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         if (val == 0) continue;
-        cam_snapshot_dump(s_snapshot_raw);
-        s_snapshot_busy = false;
+        esp_err_t ret = bsp_camera_frame_result(BSP_CAM_CLIENT_SNAP);
+        if (ret == ESP_OK) cam_snapshot_dump(s_snapshot_raw);
+        else ESP_LOGW(LOG_TAG, "snapshot capture failed: %s", esp_err_to_name(ret));
         bsp_camera_release_frame(BSP_CAM_CLIENT_SNAP);
+        portENTER_CRITICAL(&s_snapshot_mux);
+        s_snapshot_busy = false;
+        portEXIT_CRITICAL(&s_snapshot_mux);
     }
 }
 
@@ -141,33 +147,41 @@ esp_err_t cam_debug_streamer_request_snap(void)
         ESP_LOGW(LOG_TAG, "snapshot deferred: voice dialog is active");
         return ESP_ERR_INVALID_STATE;
     }
-    if (s_snapshot_busy) {
-        return ESP_ERR_INVALID_STATE;
-    }
+    portENTER_CRITICAL(&s_snapshot_mux);
+    bool busy = s_snapshot_busy;
+    if (!busy) s_snapshot_busy = true;
+    portEXIT_CRITICAL(&s_snapshot_mux);
+    if (busy) return ESP_ERR_INVALID_STATE;
+    esp_err_t ret = ESP_ERR_NO_MEM;
 
     uint32_t cam_w = 240, cam_h = 320;
     bsp_camera_get_resolution(&cam_w, &cam_h);
     size_t in_size = (size_t)cam_w * cam_h * 2;
 
+    if (in_size > s_snapshot_capacity) {
+        uint8_t *raw = heap_caps_malloc(in_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (raw == NULL) goto failed;
+        heap_caps_free(s_snapshot_raw);
+        s_snapshot_raw = raw;
+        s_snapshot_capacity = in_size;
+    }
     if (s_snapshot_task == NULL) {
-        s_snapshot_raw = heap_caps_malloc(in_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (s_snapshot_raw == NULL) {
-            return ESP_ERR_NO_MEM;
-        }
         if (xTaskCreatePinnedToCoreWithCaps(snapshot_worker, "cam_snapshot", 8192,
                                             NULL, 2, &s_snapshot_task, 0, CAM_STACK_CAPS) != pdPASS) {
             heap_caps_free(s_snapshot_raw);
             s_snapshot_raw = NULL;
+            s_snapshot_capacity = 0;
             s_snapshot_task = NULL;
-            return ESP_ERR_NO_MEM;
+            goto failed;
         }
     }
 
-    s_snapshot_busy = true;
-    esp_err_t ret = bsp_camera_request_frame(BSP_CAM_CLIENT_SNAP, s_snapshot_raw, in_size, s_snapshot_task);
-    if (ret != ESP_OK) {
-        s_snapshot_busy = false;
-    }
+    ret = bsp_camera_request_frame(BSP_CAM_CLIENT_SNAP, s_snapshot_raw, in_size, s_snapshot_task);
+    if (ret == ESP_OK) return ESP_OK;
+failed:
+    portENTER_CRITICAL(&s_snapshot_mux);
+    s_snapshot_busy = false;
+    portEXIT_CRITICAL(&s_snapshot_mux);
     return ret;
 }
 

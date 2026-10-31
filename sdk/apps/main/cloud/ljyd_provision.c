@@ -1,5 +1,6 @@
 #include "ljyd_provision.h"
 #include "ljyd_cloud.h"
+#include "ljyd_course.h"
 
 #include "qm.h"
 #include "qm_iot_dynreg.h"
@@ -61,6 +62,7 @@ void ljyd_provision_clear_and_reboot(void)
     (void)qm_kv_set(PROVISION_KV_BIND, &bound, (int)sizeof(bound), 1);
     (void)qm_kv_del(PROVISION_KV_ENV);
     (void)qm_kv_del("wifi_cfg");
+    ljyd_course_clear_configs();
     qm_msleep(50);
     qm_reboot();
 }

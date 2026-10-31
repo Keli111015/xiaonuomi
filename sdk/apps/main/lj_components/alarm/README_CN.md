@@ -1,5 +1,7 @@
 # 应用层闹钟
 
+2026-10-31 文档静态整理；本轮未编译或实机验证。项目入口见[文档导航](../../../../../docs/README.md)。
+
 这个目录位于 `apps/main/lj_components/alarm`，是平台 `qm_alarm` 组件之上的一层应用
 包装，不是通用闹钟组件。云负责下发，设备侧只做透传与行为响应。
 
@@ -32,15 +34,7 @@
 
 ## 产品标识
 
-闹钟的云端同步与下发都走 `qm_iot` 会话，产品身份在 `apps/main/cloud/ljyd_cloud.h`。
-本仓库示例用的是灵机测试服：
-
-```c
-#define CONFIG_XJIANG_CLOUD_PID    11665
-#define CONFIG_XJIANG_CLOUD_SECERT "F7B6033204064B698FEDE033605DDDBA"
-```
-
-换正式产品改这一处，下行 topic 随之变成 `/<PID>/<DID>/device/down`。
+闹钟的云端同步与下发都走 `qm_iot` 会话，产品身份从本地 `apps/main/cloud/ljyd_cloud_local.h` 提供，不在公共文档中复制产品密钥。配置入口见[完整工程说明](../../../../../docs/FULL_REPOSITORY.md)。下行 topic 使用 `/<PID>/<DID>/device/down`。
 
 ## 触发链路
 

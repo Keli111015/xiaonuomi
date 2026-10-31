@@ -75,26 +75,6 @@ static void test_posture_tracking_and_penalties(void)
     assert(s.reminders == 1 && s.penalties == 1);
     assert(s.hp == 95 && s.hp_tenths == 950);
 
-<<<<<<< Updated upstream
-    /* Sparse results must not manufacture 15 seconds of visual evidence. */
-    mc_study_reset(&s);
-    mc_study_set_active(&s, true);
-    assert(!mc_study_pose(&s, MC_TILTED, 0));
-    assert(!mc_study_pose(&s, MC_TILTED, 8000));
-    assert(!mc_study_pose(&s, MC_TILTED, 16000));
-    assert(s.abnormal_ms == 4000 && s.reminders == 0);
-    assert(!mc_study_pose(&s, MC_NORMAL, 18000));
-    assert(s.abnormal_ms == 0);
-    assert(!mc_study_pose(&s, MC_TILTED, 20000));
-    assert(!mc_study_pose(&s, MC_UNKNOWN, 22000));
-    assert(!mc_study_pose(&s, MC_TILTED, 24000));
-    assert(s.abnormal_ms == 0);
-    assert(!mc_study_pose(&s, MC_TILTED, 33000));
-    assert(s.abnormal_ms == 0); /* gap >8s starts a new sequence */
-    assert(!mc_study_pose(&s, MC_TILTED, 32000));
-    assert(s.abnormal_ms == 0); /* clock rollback */
-
-=======
     /* Notice cooldown: 60s cooldown before next reminder */
     assert(!mc_study_pose(&s, MC_TILTED, 25000));
     assert(!mc_study_pose(&s, MC_TILTED, 74999));
@@ -115,7 +95,6 @@ static void test_posture_tracking_and_penalties(void)
 static void test_exhaustion(void)
 {
     mc_study s;
->>>>>>> Stashed changes
     mc_study_reset(&s);
     mc_study_set_active(&s, true);
 
@@ -136,11 +115,63 @@ static void test_exhaustion(void)
     assert(!mc_study_pose(&s, MC_TILTED, 45000));
 }
 
+static void test_posture_sample_timing(void)
+{
+    mc_study s;
+    mc_study_reset(&s);
+    mc_study_set_active(&s, true);
+
+    /* At the production 10s cadence, the third bad sample covers 20s. */
+    assert(!mc_study_pose(&s, MC_TILTED, 1000));
+    assert(!mc_study_pose(&s, MC_HEAD_LOWERED, 11000));
+    assert(s.abnormal_ms == 10000);
+    assert(mc_study_pose(&s, MC_TILTED, 21000));
+    assert(s.reminders == 1 && s.hp_tenths == 950);
+    assert(!mc_study_pose(&s, MC_TILTED, 31000));
+    assert(!mc_study_pose(&s, MC_TILTED, 41000));
+    assert(!mc_study_pose(&s, MC_TILTED, 51000));
+    assert(!mc_study_pose(&s, MC_TILTED, 61000));
+    assert(!mc_study_pose(&s, MC_TILTED, 71000));
+    assert(!mc_study_pose(&s, MC_TILTED, 80999));
+    assert(mc_study_pose(&s, MC_TILTED, 81000)); /* exact 60s cooldown */
+    assert(s.reminders == 2 && s.hp_tenths == 900);
+
+    mc_study_reset(&s);
+    mc_study_set_active(&s, true);
+    assert(!mc_study_pose(&s, MC_TILTED, 1000));
+    assert(mc_study_pose(&s, MC_TILTED, 26000)); /* exact max gap accepted */
+
+    mc_study_reset(&s);
+    mc_study_set_active(&s, true);
+    assert(!mc_study_pose(&s, MC_TILTED, 1000));
+    assert(!mc_study_pose(&s, MC_TILTED, 26001)); /* gap >25s resets */
+    assert(s.abnormal_ms == 0 && s.reminders == 0);
+    assert(!mc_study_pose(&s, MC_TILTED, 26000)); /* clock rollback resets */
+    assert(s.abnormal_ms == 0);
+    assert(!mc_study_pose(&s, MC_TILTED, 36000));
+    assert(s.abnormal_ms == 10000);
+    assert(!mc_study_pose(&s, MC_UNKNOWN, 37000));
+    assert(!s.has_pose && s.abnormal_ms == 0);
+    assert(!mc_study_pose(&s, MC_TILTED, 38000));
+    assert(!mc_study_pose(&s, MC_NORMAL, 48000));
+    assert(!s.has_pose && s.abnormal_ms == 0);
+
+    assert(!mc_study_pose(&s, MC_TILTED, 50000));
+    assert(!mc_study_pose(&s, MC_TILTED, 60000));
+    mc_study_set_paused(&s, true, 61000);
+    assert(!s.has_pose && s.abnormal_ms == 0);
+    assert(!mc_study_pose(&s, MC_TILTED, 70000));
+    mc_study_set_active(&s, true);
+    assert(!mc_study_pose(&s, MC_TILTED, 80000));
+    assert(s.abnormal_ms == 0);
+}
+
 int main(void)
 {
     test_initial_and_chat_penalties();
     test_pause_bleeding();
     test_posture_tracking_and_penalties();
+    test_posture_sample_timing();
     test_exhaustion();
     puts("All mc_study assertion tests passed successfully!");
     return 0;
