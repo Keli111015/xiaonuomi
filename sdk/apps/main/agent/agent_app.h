@@ -37,6 +37,12 @@ int agent_app_prepare_for_local_sound(uint32_t timeout_ms);
 /* Mute or unmute agent downlink TTS audio during Pomodoro focus chat penalties. */
 void agent_app_set_pomodoro_tts_mute(qm_bool muted);
 
+/* Notify agent that Pomodoro has started; play startup sound after cloud reply finishes. */
+void agent_app_notify_pomodoro_started(void);
+
+/* Check and fallback play startup sound if cloud had no voice reply. */
+void agent_app_check_pomodoro_start_sound(void);
+
 #ifdef __cplusplus
 }
 #endif

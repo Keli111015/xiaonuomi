@@ -130,6 +130,10 @@ static void morphcube_study_task(void *arg)
             QM_LOGI(LOG_TAG, "pause bleed: hp=%u.%u",
                     (unsigned)(study.hp_tenths / 10),
                     (unsigned)(study.hp_tenths % 10));
+            if (study.exhausted) {
+                QM_LOGI(LOG_TAG, "hp exhausted by pause bleed: play death sound");
+                (void)death_sound_start();
+            }
             publish_status(&study, &pomodoro);
         }
 
@@ -144,12 +148,15 @@ static void morphcube_study_task(void *arg)
                         (unsigned)(study.hp_tenths / 10),
                         (unsigned)(study.hp_tenths % 10),
                         (unsigned)study.penalties);
-                (void)hurt_sound_start();
                 if (study.exhausted) {
+                    QM_LOGI(LOG_TAG, "hp exhausted to 0: play death sound");
+                    (void)death_sound_start();
                     int ret = qm_pomodoro_pause(s_timer);
                     if (ret != QM_EOK) {
                         QM_LOGW(LOG_TAG, "pause at zero hp failed ret=%d", ret);
                     }
+                } else {
+                    (void)hurt_sound_start();
                 }
             } else {
                 QM_LOGI(LOG_TAG, "chat ignored: active=%d hp=%u.%u",

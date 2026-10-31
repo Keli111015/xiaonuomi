@@ -4,6 +4,8 @@
 
 #if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
 #include "morphcube_study_runtime.h"
+#include "boot_sound.h"
+#include "esp_timer.h"
 #endif
 
 #if defined(CONFIG_LJYD_PLAYBACK_SUPPORT) && CONFIG_LJYD_PLAYBACK_SUPPORT
@@ -51,6 +53,33 @@ static uint8_t s_turn_asr_seen;
 static uint8_t s_turn_pomodoro_cmd;
 static uint8_t s_turn_chat_handled;
 static uint8_t s_turn_final_asr_seen;
+static volatile uint8_t s_pomodoro_start_pending;
+static volatile uint8_t s_pomodoro_start_tts_seen;
+static volatile int64_t s_pomodoro_start_tick_ms;
+
+void agent_app_notify_pomodoro_started(void)
+{
+    s_pomodoro_start_pending = 1U;
+    s_pomodoro_start_tts_seen = 0U;
+    s_pomodoro_start_tick_ms = esp_timer_get_time() / 1000;
+    QM_LOGI(LOG_TAG, "pomodoro start pending, wait for cloud tts before jingle");
+}
+
+void agent_app_check_pomodoro_start_sound(void)
+{
+    if (!s_pomodoro_start_pending) {
+        return;
+    }
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    if ((now_ms - s_pomodoro_start_tick_ms >= 3000) &&
+        s_dialog_state != QM_AGENT_DIALOG_STATE_THINKING &&
+        s_dialog_state != QM_AGENT_DIALOG_STATE_SPEAKING) {
+        s_pomodoro_start_pending = 0U;
+        s_pomodoro_start_tts_seen = 0U;
+        QM_LOGI(LOG_TAG, "no cloud tts within 3s for pomodoro start, play start sound");
+        (void)pomodoro_start_sound_start();
+    }
+}
 
 static qm_bool is_pomodoro_command_text(const char *text)
 {
@@ -110,6 +139,8 @@ void agent_app_set_pomodoro_tts_mute(qm_bool muted)
 {
     (void)muted;
 }
+void agent_app_notify_pomodoro_started(void) {}
+void agent_app_check_pomodoro_start_sound(void) {}
 #endif
 
 static void abort_tts_wait(void);
@@ -252,8 +283,8 @@ static void on_agent_event(void *event_handler_arg,
                     notice->data.text.final,
                     notice->data.text.text);
 #if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
-            if ((!notice->data.text.final && s_turn_chat_handled) ||
-                (notice->data.text.final && s_turn_final_asr_seen)) {
+            if (s_dialog_state == QM_AGENT_DIALOG_STATE_LISTENING &&
+                (s_turn_final_asr_seen || s_turn_chat_handled)) {
                 s_turn_asr_seen = 0U;
                 s_turn_pomodoro_cmd = 0U;
                 s_turn_chat_handled = 0U;
@@ -264,7 +295,7 @@ static void on_agent_event(void *event_handler_arg,
                 if (is_pomodoro_command_text(notice->data.text.text)) {
                     s_turn_pomodoro_cmd = 1U;
                     agent_app_set_pomodoro_tts_mute(QM_FALSE);
-                } else if (!morphcube_study_runtime_is_focus_active()) {
+                } else if (!s_turn_chat_handled && !morphcube_study_runtime_is_focus_active()) {
                     agent_app_set_pomodoro_tts_mute(QM_FALSE);
                 }
             }
@@ -280,6 +311,9 @@ static void on_agent_event(void *event_handler_arg,
                     notice->data.text.final,
                     notice->data.text.text);
 #if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+            if (s_pomodoro_start_pending) {
+                s_pomodoro_start_tts_seen = 1U;
+            }
             if (is_pomodoro_status_tts(notice->data.text.text)) {
                 s_turn_pomodoro_cmd = 1U;
                 agent_app_set_pomodoro_tts_mute(QM_FALSE);
@@ -305,6 +339,14 @@ static void on_agent_event(void *event_handler_arg,
             QM_LOGI(LOG_TAG, "dialog=%s",
                     dialog_name(notice->data.agent_state.state));
 #if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+            if (s_pomodoro_start_pending && s_pomodoro_start_tts_seen &&
+                (notice->data.agent_state.state == QM_AGENT_DIALOG_STATE_SILENT ||
+                 notice->data.agent_state.state == QM_AGENT_DIALOG_STATE_LISTENING)) {
+                s_pomodoro_start_pending = 0U;
+                s_pomodoro_start_tts_seen = 0U;
+                QM_LOGI(LOG_TAG, "dialog silent/listening after tts for pomodoro start, play start sound");
+                (void)pomodoro_start_sound_start();
+            }
             if (notice->data.agent_state.state == QM_AGENT_DIALOG_STATE_LISTENING) {
                 s_turn_asr_seen = 0U;
                 s_turn_pomodoro_cmd = 0U;
@@ -332,6 +374,11 @@ static void on_agent_event(void *event_handler_arg,
             }
             break;
         case QM_AGENT_EVENT_TTS_PLAYBACK_STARTED:
+#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+            if (s_pomodoro_start_pending) {
+                s_pomodoro_start_tts_seen = 1U;
+            }
+#endif
             if (s_waiting_tts_complete) {
                 s_tts_playback_started = 1U;
                 finish_custom_tts_input_if_ready();
@@ -355,6 +402,14 @@ static void on_agent_event(void *event_handler_arg,
             if (s_waiting_tts_complete && s_tts_complete_sem_ready) {
                 (void)qm_sem_signal(&s_tts_complete_sem);
             }
+#if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+            if (s_pomodoro_start_pending) {
+                s_pomodoro_start_pending = 0U;
+                s_pomodoro_start_tts_seen = 0U;
+                QM_LOGI(LOG_TAG, "cloud tts playback complete for pomodoro start, play start sound");
+                (void)pomodoro_start_sound_start();
+            }
+#endif
             QM_LOGI(LOG_TAG, "tts playback complete generation=%u",
                     (unsigned)notice->generation);
             break;
