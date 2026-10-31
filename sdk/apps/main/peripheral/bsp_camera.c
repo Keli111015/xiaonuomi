@@ -67,6 +67,7 @@ static volatile bool s_stream_stop_req;
 static volatile bool s_continuous_stream;
 static volatile bool s_oneshot_stream;
 static volatile bool s_voice_paused_by_cam;
+static bool s_early_init_once;   /* UART VFS 接管与 PWDN 脉冲只能执行一次 */
 static uint32_t s_warmup_frames;
 static uint32_t s_empty_streak;
 static TaskHandle_t s_stream_task;
@@ -145,6 +146,15 @@ static int s_pose_rotation;
 static bool s_pose_calibrate;
 static TickType_t s_pose_requested_at;
 
+/* 姿态请求的“投递 → 执行”两级拆分：
+ * 调用方可能运行在 FreeRTOS 软件定时器任务里（栈仅 CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH），
+ * 那里不允许做 heap_caps_malloc / xTaskCreate。所以请求方只记录参数并通知本任务，
+ * 真正的分配与建任务全部在 cam_pose_req 任务上下文完成。 */
+static TaskHandle_t s_pose_req_task;
+static int s_pose_req_rotation;
+static bool s_pose_req_calibrate;
+static bool s_pose_req_pending;
+
 static void cam_pose_task(void *arg)
 {
     (void)arg;
@@ -216,28 +226,34 @@ static void cam_pose_task(void *arg)
     }
 }
 
-esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
+/* 真正的请求执行：分配抓拍缓冲、按需创建推理任务、通知流任务。
+ * 只在 cam_pose_req 任务上下文里被调用，绝不从定时器/中断上下文进入。 */
+static esp_err_t cam_pose_request_exec(int rotation, bool calibrate)
 {
-    if (!s_available) return ESP_ERR_INVALID_STATE;
-    if (agent_app_is_dialog_busy()) {
-        ESP_LOGW(LOG_TAG, "pose request deferred: voice dialog is active");
-        return ESP_ERR_INVALID_STATE;
-    }
     if (s_pose_task == NULL) {
-        s_pose_raw = heap_caps_malloc((size_t)s_cam.width * s_cam.height * 2,
-                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (s_pose_raw == NULL) return ESP_ERR_NO_MEM;
+        if (s_pose_raw == NULL) {
+            s_pose_raw = heap_caps_malloc((size_t)s_cam.width * s_cam.height * 2,
+                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (s_pose_raw == NULL) {
+                ESP_LOGE(LOG_TAG, "pose raw buffer alloc failed (%u bytes)",
+                         (unsigned)((size_t)s_cam.width * s_cam.height * 2));
+                return ESP_ERR_NO_MEM;
+            }
+        }
         if (xTaskCreatePinnedToCoreWithCaps(cam_pose_task, "cam_pose", 8192,
                 NULL, 3, &s_pose_task, 1, CAM_STACK_CAPS) != pdPASS) {
             heap_caps_free(s_pose_raw);
             s_pose_raw = NULL;
             s_pose_task = NULL;
+            ESP_LOGE(LOG_TAG, "cam_pose task create failed");
             return ESP_ERR_NO_MEM;
         }
+        ESP_LOGI(LOG_TAG, "cam_pose task in PSRAM, stack=8192");
     }
     if (cam_ensure_stream_task() != ESP_OK) {
         return ESP_FAIL;
     }
+
     portENTER_CRITICAL(&s_pose_mux);
     bool busy = s_pose_state != 0;
     if (!busy) {
@@ -255,7 +271,87 @@ esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
     if (!s_continuous_stream) {
         s_oneshot_stream = true;
     }
-    xTaskNotifyGive(s_stream_task);
+    if (s_stream_task != NULL) {
+        xTaskNotifyGive(s_stream_task);
+    }
+    return ESP_OK;
+}
+
+static void cam_pose_req_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        int rotation;
+        bool calibrate;
+        esp_err_t ret;
+
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        portENTER_CRITICAL(&s_pose_mux);
+        rotation = s_pose_req_rotation;
+        calibrate = s_pose_req_calibrate;
+        portEXIT_CRITICAL(&s_pose_mux);
+
+        ret = cam_pose_request_exec(rotation, calibrate);
+
+        /* pending 在 exec 结束后才清零：这样“已排队未执行”的窗口也算忙，
+         * 与原来 s_pose_state==1 的语义一致，避免同一拍被连续触发两次。 */
+        portENTER_CRITICAL(&s_pose_mux);
+        s_pose_req_pending = false;
+        portEXIT_CRITICAL(&s_pose_mux);
+
+        if (ret != ESP_OK) {
+            ESP_LOGW(LOG_TAG, "pose request exec failed: %s", esp_err_to_name(ret));
+        }
+    }
+}
+
+static esp_err_t cam_ensure_pose_req_task(void)
+{
+    if (s_pose_req_task != NULL) {
+        return ESP_OK;
+    }
+    if (xTaskCreatePinnedToCoreWithCaps(cam_pose_req_task, "cam_pose_req", 4096,
+                                        NULL, 3, &s_pose_req_task, 1,
+                                        CAM_STACK_CAPS) != pdPASS) {
+        s_pose_req_task = NULL;
+        ESP_LOGE(LOG_TAG, "pose req task create failed");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(LOG_TAG, "pose req task in PSRAM, stack=4096");
+    return ESP_OK;
+}
+
+/* 对外接口：任意任务上下文（含软件定时器任务）都可安全调用。
+ * 这里只做参数记录与一次任务通知，不分配内存、不创建任务。 */
+esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
+{
+    bool busy;
+
+    if (!s_available) return ESP_ERR_INVALID_STATE;
+    if (s_pose_req_task == NULL) {
+        ESP_LOGW(LOG_TAG, "pose request dropped: request task not ready");
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (agent_app_is_dialog_busy()) {
+        ESP_LOGW(LOG_TAG, "pose request deferred: voice dialog is active");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    portENTER_CRITICAL(&s_pose_mux);
+    busy = (s_pose_state != 0) || s_pose_req_pending;
+    if (!busy) {
+        s_pose_req_rotation = rotation;
+        s_pose_req_calibrate = calibrate;
+        s_pose_req_pending = true;
+    }
+    portEXIT_CRITICAL(&s_pose_mux);
+    if (busy) {
+        ESP_LOGI(LOG_TAG, "pose request skipped: previous one still running");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    xTaskNotifyGive(s_pose_req_task);
     return ESP_OK;
 }
 #else
@@ -736,9 +832,20 @@ static esp_err_t cam_ensure_stream_task(void)
 
 esp_err_t bsp_camera_early_init(void)
 {
-    /* Route stdio/ESP logs through the same UART driver TX mutex as CLI. */
-    esp_vfs_dev_uart_use_driver((uart_port_t)CONFIG_QM_DEBUG_UART_PORT);
-    cam_pwdn_hold_low();
+    /* 一次性初始化：UART VFS 接管与相机 PWDN 脉冲只能执行一次。
+     * 本函数会被 main.c 与 bsp_camera_start()（cam start 命令）重复调用，
+     * 若每次都执行这两步会重复注册 VFS、重复脉冲 PWDN 并打断正在出图的相机。 */
+    if (!s_early_init_once) {
+        s_early_init_once = true;
+        /* Route stdio/ESP logs through the same UART driver TX mutex as CLI. */
+        esp_vfs_dev_uart_use_driver((uart_port_t)CONFIG_QM_DEBUG_UART_PORT);
+        cam_pwdn_hold_low();
+    }
+
+    if (s_available && s_video_ready) {
+        /* 已经初始化完成：直接返回，不要重做 mmap 与任务创建。 */
+        return ESP_OK;
+    }
 
     if (!s_video_ready) {
         if (cam_video_init() != ESP_OK) {
@@ -754,6 +861,10 @@ esp_err_t bsp_camera_early_init(void)
     }
     s_available = true;
     (void)cam_ensure_stream_task();
+#if CONFIG_QM_POSE_SUPPORT
+    /* 姿态请求任务必须提前建好：请求可能来自软件定时器任务，那里不能创建任务。 */
+    (void)cam_ensure_pose_req_task();
+#endif
     ESP_LOGI(LOG_TAG, "early init ok, stream deferred");
     return ESP_OK;
 }
