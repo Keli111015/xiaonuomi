@@ -64,6 +64,7 @@ static bool s_available;
 static bool s_video_ready;
 static bool s_buffers_queued;
 static volatile bool s_stream_stop_req;
+static volatile bool s_continuous_stream;
 static volatile bool s_oneshot_stream;
 static volatile bool s_voice_paused_by_cam;
 static uint32_t s_warmup_frames;
@@ -122,11 +123,12 @@ static esp_err_t snapshot_request(void)
         }
     }
     cam_enter_vision_window();
-    if (!s_cam.stream_on) {
+    if (!s_cam.stream_on && !s_continuous_stream) {
         if (bsp_camera_stream_start() != ESP_OK) {
             cam_exit_vision_window();
             return ESP_FAIL;
         }
+        s_continuous_stream = false;
         s_oneshot_stream = true;
     }
     s_snapshot_busy=true;
@@ -245,11 +247,12 @@ esp_err_t bsp_camera_pose_request(int rotation, bool calibrate)
     }
 
     cam_enter_vision_window();
-    if (!s_cam.stream_on) {
+    if (!s_cam.stream_on && !s_continuous_stream) {
         if (bsp_camera_stream_start() != ESP_OK) {
             cam_exit_vision_window();
             return ESP_FAIL;
         }
+        s_continuous_stream = false;
         s_oneshot_stream = true;
     }
 
@@ -579,6 +582,16 @@ static void cam_stream_task(void *arg)
         struct v4l2_buffer buf;
 
         if (!s_cam.stream_on) {
+            bool pose_busy = false;
+#if CONFIG_QM_POSE_SUPPORT
+            portENTER_CRITICAL(&s_pose_mux);
+            pose_busy = (s_pose_state == 2);
+            portEXIT_CRITICAL(&s_pose_mux);
+#endif
+            if (s_continuous_stream && !s_stream_stop_req && !pose_busy && !s_snapshot_busy) {
+                (void)cam_stream_on();
+                continue;
+            }
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
@@ -622,7 +635,7 @@ static void cam_stream_task(void *arg)
             t0 = now;
         }
 
-        bool frame_ready_for_oneshot = (!s_oneshot_stream || s_warmup_frames >= 2);
+        bool frame_ready_for_oneshot = (s_warmup_frames >= 2);
         bool stop_after_frame = false;
 
 #if CONFIG_QM_POSE_SUPPORT
@@ -652,9 +665,7 @@ static void cam_stream_task(void *arg)
         }
         if (take_pose) {
             memcpy(s_pose_raw, s_cam.buffer[buf.index], expect);
-            if (s_oneshot_stream) {
-                stop_after_frame = true;
-            }
+            stop_after_frame = true;
         }
 #endif
 
@@ -663,9 +674,7 @@ static void cam_stream_task(void *arg)
             s_snap=false;
             memcpy(s_snapshot_raw,s_cam.buffer[buf.index],expect);
             take_snap = true;
-            if (s_oneshot_stream) {
-                stop_after_frame = true;
-            }
+            stop_after_frame = true;
         } else if (s_snap && (TickType_t)(xTaskGetTickCount()-s_snapshot_requested_at)>=pdMS_TO_TICKS(5000)) {
             s_snap=false;s_snapshot_busy=false;
             qm_cli_printf("SNAP_ERROR no_valid_camera_frame\r\n");
@@ -723,6 +732,7 @@ esp_err_t bsp_camera_stream_start(void)
         ESP_LOGE(LOG_TAG, "stream_start before early_init");
         return ESP_ERR_INVALID_STATE;
     }
+    s_continuous_stream = true;
     s_oneshot_stream = false;
     if (cam_stream_on() != ESP_OK) {
         return ESP_FAIL;
@@ -743,6 +753,8 @@ esp_err_t bsp_camera_stream_start(void)
 
 esp_err_t bsp_camera_stream_stop(void)
 {
+    s_continuous_stream = false;
+    s_oneshot_stream = false;
     if (!s_cam.stream_on) {
         return ESP_OK;
     }
