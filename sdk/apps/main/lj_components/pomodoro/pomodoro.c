@@ -1,4 +1,5 @@
 #include "pomodoro.h"
+#include "board_bridge.h"
 
 #include "qm_config.h"
 #include "morphcube_study_runtime.h"
@@ -187,9 +188,46 @@ void pomodoro_init(void)
         QM_LOGE(LOG_TAG, "study runtime init failed ret=%d", ret);
         return;
     }
+    (void)board_bridge_cli_init();
 #if CONFIG_APP_POMODORO_AUTO_START
     (void)qm_pomodoro_start(g_pomodoro);
 #endif
+}
+
+int pomodoro_execute_command(const char *command)
+{
+    if (!command || !g_pomodoro) return -QM_EINVAL;
+    int ret;
+    if (strcmp(command, "start") == 0)
+    {
+        ret = pomodoro_start();
+        if (ret == QM_EOK)
+        {
+            agent_app_set_pomodoro_tts_mute(QM_FALSE);
+        }
+    }
+    else if (strcmp(command, "stop") == 0)
+    {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
+        ret = pomodoro_stop();
+    }
+    else if (strcmp(command, "pause") == 0)
+    {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
+        ret = pomodoro_pause();
+    }
+    else if (strcmp(command, "resume") == 0)
+    {
+        agent_app_set_pomodoro_tts_mute(QM_FALSE);
+        ret = pomodoro_resume();
+    }
+    else
+    {
+        QM_LOGW(LOG_TAG, "unknown command=%s", command);
+        return -QM_EINVAL;
+    }
+
+    return ret;
 }
 
 static void handle_pomodoro_cloud_down(void *handle,
@@ -230,35 +268,9 @@ static void handle_pomodoro_cloud_down(void *handle,
         return;
     }
 
-    if (strcmp(subMethod, "start") == 0)
-    {
-        ret = pomodoro_start();
-        if (ret == QM_EOK)
-        {
-            agent_app_set_pomodoro_tts_mute(QM_FALSE);
-        }
-    }
-    else if (strcmp(subMethod, "stop") == 0)
-    {
-        agent_app_set_pomodoro_tts_mute(QM_FALSE);
-        ret = pomodoro_stop();
-    }
-    else if (strcmp(subMethod, "pause") == 0)
-    {
-        agent_app_set_pomodoro_tts_mute(QM_FALSE);
-        ret = pomodoro_pause();
-    }
-    else if (strcmp(subMethod, "resume") == 0)
-    {
-        agent_app_set_pomodoro_tts_mute(QM_FALSE);
-        ret = pomodoro_resume();
-    }
-    else
-    {
-        QM_LOGW(LOG_TAG, "unknown subMethod=%s", subMethod);
-        cJSON_Delete(root);
-        return;
-    }
+    /* Forward the intent even if the voice board timer cannot apply it locally. */
+    (void)board_bridge_forward(subMethod);
+    ret = pomodoro_execute_command(subMethod);
 
     if (ret != QM_EOK)
     {

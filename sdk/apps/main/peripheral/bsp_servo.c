@@ -35,7 +35,7 @@ static qm_task_t s_move_task;
 static unsigned s_output_ticks;
 static unsigned s_reminder_step;
 static unsigned s_reminder_ticks;
-static const int16_t s_reminder_angles[] = {80, 100, 80, 100, 90};
+static const int16_t s_reminder_angles[] = {60, 120, 60, 120, 90};
 static int s_face_angle = 90; /* Session-only, commanded angle, no feedback. */
 
 static uint16_t servo_clamp_pulse(uint16_t pulse_us)
@@ -126,7 +126,7 @@ static void servo_move_task(void *arg)
         if (s_reminder_ticks && --s_reminder_ticks == 0) {
             if (++s_reminder_step < sizeof(s_reminder_angles) / sizeof(s_reminder_angles[0])) {
                 s_target_angle = s_reminder_angles[s_reminder_step];
-                s_reminder_ticks = 13; /* 520ms per target, including ramp. */
+                s_reminder_ticks = BSP_SERVO_REMINDER_TARGET_TICKS; /* 720ms including ramp. */
                 s_output_ticks = 38;
             }
         }
@@ -261,7 +261,7 @@ qm_err_t bsp_servo_focus_reminder(void)
         return -QM_EBUSY;
     }
     s_reminder_step = 0;
-    s_reminder_ticks = 13;
+    s_reminder_ticks = BSP_SERVO_REMINDER_TARGET_TICKS;
     s_target_angle = s_reminder_angles[0];
     s_output_ticks = 38;
     qm_mutex_unlock(&s_lock);
@@ -285,7 +285,7 @@ void bsp_servo_deinit(void)
 
 void bsp_servo_set_pulse_us(uint16_t pulse_us)
 {
-    if (pulse_us < servo_angle_to_pulse(75) || pulse_us > servo_angle_to_pulse(105)) {
+    if (pulse_us < servo_angle_to_pulse(BSP_SERVO_SAFE_ANGLE_MIN) || pulse_us > servo_angle_to_pulse(BSP_SERVO_SAFE_ANGLE_MAX)) {
         QM_LOGW(LOG_TAG, "pulse rejected: outside bench range");
         return;
     }
@@ -324,8 +324,8 @@ void bsp_servo_set_angle(int16_t angle)
 {
     int16_t from;
 
-    if (angle < 75 || angle > 105) {
-        QM_LOGW(LOG_TAG, "angle rejected: allowed nominal range 75..105");
+    if (angle < BSP_SERVO_SAFE_ANGLE_MIN || angle > BSP_SERVO_SAFE_ANGLE_MAX) {
+        QM_LOGW(LOG_TAG, "angle rejected: allowed nominal range 60..120");
         return;
     }
     if (bsp_servo_init() != QM_EOK) return;
@@ -361,13 +361,52 @@ int16_t bsp_servo_get_angle(void)
 }
 
 #if CONFIG_QM_CLI_SUPPORT
+#include "driver/gpio.h"
+#include "esp_timer.h"
+#include "esp_rom_sys.h"
+/* Diagnostic samples the actual GPIO input pad while PWM drives it. It cannot
+ * measure the external 5V rail or guarantee the wire/servo connection. */
+static void servo_probe(void)
+{
+    if (bsp_servo_init() != QM_EOK) {
+        qm_cli_printf("servo probe: PWM init failed\r\n"); return;
+    }
+    bsp_servo_set_angle(90);
+    qm_msleep(160);
+    if (gpio_input_enable((gpio_num_t)BSP_SERVO_PWM_PIN) != ESP_OK) {
+        bsp_servo_deinit(); qm_cli_printf("servo probe: pad input unavailable\r\n"); return;
+    }
+    unsigned high = 0, low = 0, rises = 0, n = 0;
+    int previous = gpio_get_level((gpio_num_t)BSP_SERVO_PWM_PIN);
+    int64_t start = esp_timer_get_time();
+    while (esp_timer_get_time() - start < 200000) {
+        int value = gpio_get_level((gpio_num_t)BSP_SERVO_PWM_PIN);
+        if (value) ++high; else ++low;
+        if (value && !previous) ++rises;
+        previous = value;
+        esp_rom_delay_us(10);
+        if ((++n % 32) == 0) qm_msleep(1);
+    }
+    bsp_servo_deinit();
+    /* Input observation remains enabled; LEDC output routing is unchanged. */
+    qm_cli_printf("servo probe GPIO%d high_samples=%u low_samples=%u rises=%u in~200ms; %s; PWM off\r\n",
+        BSP_SERVO_PWM_PIN, high, low, rises,
+        high && low && rises >= 3 ? "pad PWM transitions observed" : "pad PWM NOT confirmed");
+}
 static void servo_cli(char *buf, int len, int argc, char **argv)
 {
     (void)buf; (void)len;
-    if (argc == 2 && strcmp(argv[1], "stop") == 0) {
+    if (argc == 2 && strcmp(argv[1], "probe") == 0) {
+        servo_probe();
+    } else if (argc == 2 && strcmp(argv[1], "stop") == 0) {
         bsp_servo_deinit();
         qm_cli_printf("servo PWM off; power remains connected\r\n");
     } else if (argc == 2 && strcmp(argv[1], "status") == 0) {
+        qm_cli_printf("reminder=%d,%d,%d,%d,%d nominal range=%d..%d target_ms=%d\r\n",
+                      s_reminder_angles[0], s_reminder_angles[1], s_reminder_angles[2],
+                      s_reminder_angles[3], s_reminder_angles[4],
+                      BSP_SERVO_SAFE_ANGLE_MIN, BSP_SERVO_SAFE_ANGLE_MAX,
+                      BSP_SERVO_REMINDER_TARGET_TICKS * BSP_SERVO_MOVE_STEP_MS);
         if (!s_inited) { qm_cli_printf("servo not started; face=90; no position feedback\r\n"); return; }
         qm_mutex_lock(&s_lock, QM_WAIT_FOREVER);
         qm_cli_printf("PWM=%s commanded_us=%u target=%d face=%d; no position feedback\r\n",
@@ -388,14 +427,14 @@ static void servo_cli(char *buf, int len, int argc, char **argv)
     } else if (argc == 3 && strcmp(argv[1], "angle") == 0) {
         char *end; errno = 0;
         long angle = strtol(argv[2], &end, 10);
-        if (errno || end == argv[2] || *end || angle < 75 || angle > 105) {
-            qm_cli_printf("angle must be an integer 75..105\r\n"); return;
+        if (errno || end == argv[2] || *end || angle < BSP_SERVO_SAFE_ANGLE_MIN || angle > BSP_SERVO_SAFE_ANGLE_MAX) {
+            qm_cli_printf("angle must be an integer 60..120\r\n"); return;
         }
         bsp_servo_set_angle((int16_t)angle);
-    } else qm_cli_printf("servo status|angle <75..105>|save|face|stop\r\n");
+    } else qm_cli_printf("servo status|angle <60..120>|save|face|stop|probe\r\n");
 }
 static const struct qm_cli_command s_servo_cmd = {
-    .name = "servo", .help = "servo status|angle <75..105>|save|face|stop (session calibration)",
+    .name = "servo", .help = "servo status|angle <60..120>|save|face|stop|probe (session calibration)",
     .function = servo_cli,
 };
 #endif

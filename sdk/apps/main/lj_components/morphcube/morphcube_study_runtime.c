@@ -3,6 +3,7 @@
 #include "boot_sound.h"
 #include "mc_study.h"
 #include "bsp_servo.h"
+#include "board_bridge.h"
 #include "ljyd_method.h"
 #include "qm.h"
 #include "qm_errno.h"
@@ -65,6 +66,20 @@ static void publish_status(const mc_study *study,
     xSemaphoreGive(s_status_lock);
 }
 
+/* Owned by the study task; reset for each newly entered focus phase. */
+static bool s_end_reminder_sent;
+static void request_end_reminder(const char *reason)
+{
+    if (s_end_reminder_sent) return;
+    int ret = bsp_servo_focus_reminder();
+    if (ret == QM_EOK) {
+        s_end_reminder_sent = true;
+        QM_LOGI(LOG_TAG, "focus end reminder accepted reason=%s", reason);
+    } else {
+        QM_LOGW(LOG_TAG, "focus end reminder rejected reason=%s ret=%d", reason, ret);
+    }
+}
+
 static void handle_pomodoro(mc_study *study,
                             qm_pomodoro_status_t *pomodoro,
                             const qm_pomodoro_event_data_t *event)
@@ -73,6 +88,10 @@ static void handle_pomodoro(mc_study *study,
 
     switch (event->event) {
     case QM_POMODORO_EVENT_STATE_CHANGED:
+        if (event->status.state == QM_POMODORO_STATE_FOCUS &&
+            event->previous_state != QM_POMODORO_STATE_FOCUS) {
+            s_end_reminder_sent = false;
+        }
         if (event->status.state == QM_POMODORO_STATE_FOCUS &&
             (event->previous_state == QM_POMODORO_STATE_IDLE ||
              event->previous_state == QM_POMODORO_STATE_FINISHED)) {
@@ -95,11 +114,9 @@ static void handle_pomodoro(mc_study *study,
                             event->status.state == QM_POMODORO_STATE_FOCUS);
         break;
     case QM_POMODORO_EVENT_STOPPED:
-        /* Stop while focused (including paused focus) is an explicit finish.
-         * Exhaustion also calls stop internally; keep its own feedback only. */
-        if (event->previous_state == QM_POMODORO_STATE_FOCUS && !study->exhausted) {
-            int ret = bsp_servo_focus_reminder();
-            if (ret != QM_EOK) QM_LOGW(LOG_TAG, "stop reminder rejected ret=%d", ret);
+        /* Any actual focus stop ends the phase, including zero HP and paused focus. */
+        if (event->previous_state == QM_POMODORO_STATE_FOCUS) {
+            request_end_reminder(study->exhausted ? "hp exhausted" : "stop");
         }
         mc_study_set_paused(study, false, monotonic_ms());
         mc_study_set_active(study, false);
@@ -111,8 +128,7 @@ static void handle_pomodoro(mc_study *study,
     case QM_POMODORO_EVENT_PHASE_DONE:
         if (event->previous_state == QM_POMODORO_STATE_FOCUS &&
             !event->phase_skipped) {
-            int ret = bsp_servo_focus_reminder();
-            if (ret != QM_EOK) QM_LOGW(LOG_TAG, "focus reminder rejected ret=%d", ret);
+            request_end_reminder("natural completion");
         }
         break;
     case QM_POMODORO_EVENT_TICK:
@@ -130,6 +146,9 @@ static void finish_exhausted_round(void)
         QM_LOGW(LOG_TAG, "stop at zero hp failed ret=%d", ret);
     } else {
         QM_LOGI(LOG_TAG, "hp exhausted: pomodoro round stopped");
+        /* Voice board propagates its local exhaustion to the action board.
+         * Action board rejects forwarding by role, so this cannot echo-loop. */
+        (void)board_bridge_forward("stop");
         /* A local stop does not execute the cloud's voice-command path.
          * Report it explicitly so the cloud can leave Pomodoro mode too.
          * Keep this on the study task, not the timer/event callback. */

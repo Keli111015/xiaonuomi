@@ -57,6 +57,7 @@ set(COMPONENT_SRCS
     "./lj_components/iot_control/ctrl/iot_control_volume.c"
     "./lj_components/course/ljyd_course.c"
     "./lj_components/pomodoro/pomodoro.c"
+    "./lj_components/pomodoro/board_bridge.c"
     "${QDEV}/components/qm_pomodoro/src/qm_pomodoro.c"
     "./lj_components/morphcube/mc_study.c"
     "./lj_components/morphcube/morphcube_study_runtime.c"

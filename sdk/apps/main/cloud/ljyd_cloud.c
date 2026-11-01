@@ -1,3 +1,4 @@
+#include "board_bridge.h"
 #include "ljyd_cloud.h"
 #include "ljyd_method.h"
 #include "ljyd_provision.h"
@@ -432,6 +433,7 @@ static void cloud_iot_recv_handler(void *handle, const qm_iot_recv_t *recv, void
 
 void ljyd_cloud_on_network_up(void)
 {
+    (void)board_bridge_init();
     if (iot_handle != NULL) {
         (void)qm_iot_network_update(iot_handle, QM_IOT_NETWORK_UP);
     }

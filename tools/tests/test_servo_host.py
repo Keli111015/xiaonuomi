@@ -55,28 +55,32 @@ void qm_task_exit(void*a){}
 void qm_msleep(int ms){
  assert(ms==40);
  if(s_output_ticks) {
-  assert(s_target_angle>=75 && s_target_angle<=105);
+  assert(s_target_angle>=60 && s_target_angle<=120);
   if(pos<5 && s_pulse_us==servo_angle_to_pulse(s_reminder_angles[pos])) seen[pos++]=1;
  }
  if(--budget==0)s_move_run=0;
 }
 static void run(int n){budget=n;s_move_run=1;servo_move_task(NULL);}
 int main(void){
+ const int16_t expected[]={60,120,60,120,90};
+ for(int i=0;i<5;i++)assert(s_reminder_angles[i]==expected[i]);
  assert(bsp_servo_init()==0 && writes==0 && tasks==1);
  assert(bsp_servo_init()==0 && tasks==1);
  s_init_busy=1;assert(bsp_servo_init()==-QM_EBUSY);s_init_busy=0;
  assert(bsp_servo_focus_reminder()==0);
  assert(bsp_servo_focus_reminder()==-QM_EBUSY);
- run(110);assert(pos==5 && s_pulse_us==1500 && s_output_ticks==0 && s_reminder_ticks==0);
+ run(150);assert(pos==5 && s_pulse_us==1500 && s_output_ticks==0 && s_reminder_ticks==0);
  assert(bsp_servo_focus_reminder()==0);run(4);bsp_servo_deinit();
  int before=writes;run(90);assert(writes==before && s_reminder_ticks==0);
  assert(bsp_servo_focus_reminder()==0);run(4);bsp_servo_set_angle(90);run(70);
  assert(s_pulse_us==1500 && s_reminder_ticks==0 && s_output_ticks==0);
  assert(bsp_servo_focus_reminder()==0);fail_pwm=1;run(1);
  assert(s_reminder_ticks==0 && s_output_ticks==0);fail_pwm=0;
- assert(bsp_servo_focus_reminder()==0);run(8);assert(s_pulse_us==servo_angle_to_pulse(80));
+ assert(bsp_servo_focus_reminder()==0);run(8);assert(s_pulse_us==servo_angle_to_pulse(60));
  fail_pwm=1;run(1);assert(s_output_ticks==0 && s_reminder_ticks==0);fail_pwm=0;
- before=writes;bsp_servo_set_angle(180);run(10);assert(writes==before);
+ bsp_servo_set_angle(60);run(70);assert(s_pulse_us==servo_angle_to_pulse(60) && !s_output_ticks);
+ bsp_servo_set_angle(120);run(70);assert(s_pulse_us==servo_angle_to_pulse(120) && !s_output_ticks);
+ before=writes;bsp_servo_set_angle(59);bsp_servo_set_angle(121);bsp_servo_set_angle(180);run(10);assert(writes==before);
  puts("PASS: idle boot, init guard, full sequence, busy rejection, stop, manual override, ramp/hold faults, angle bound");
 }
 """)
@@ -89,12 +93,14 @@ int main(void){
         (p / 'qm_types.h').write_text('#include <stdint.h>\ntypedef int qm_bool;\n')
         (p / 'qm_pomodoro.h').write_bytes((root / 'sdk/qumios-dev/components/qm_pomodoro/include/qm_pomodoro.h').read_bytes())
         runtime = (root / 'sdk/apps/main/lj_components/morphcube/morphcube_study_runtime.c').read_text(encoding='utf-8')
-        handler = runtime[runtime.index('static void handle_pomodoro('):runtime.index('static void finish_exhausted_round(')]
+        handler = runtime[runtime.index('static bool s_end_reminder_sent;'):runtime.index('static void finish_exhausted_round(')]
+        exhaustion = runtime[runtime.index('static void finish_exhausted_round('):runtime.index('static void morphcube_study_task(')]
         (p / 'event.c').write_text(r"""
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "qm.h"
 #include "qm_log.h"
 #include "qm_pomodoro.h"
@@ -105,22 +111,40 @@ void mc_study_reset(mc_study *s){}
 void mc_study_set_active(mc_study*s,bool active){}
 void mc_study_set_paused(mc_study*s,bool paused,uint64_t now_ms){}
 int bsp_servo_focus_reminder(void){reminders++;return 0;}
-""" + handler + r"""
+static qm_pomodoro_t s_timer;
+static int stop_result, forwards, cloud_stops, deaths;
+int qm_pomodoro_stop(qm_pomodoro_t timer){return stop_result;}
+int board_bridge_forward(const char *command){assert(strcmp(command,"stop")==0);forwards++;return 0;}
+int ljyd_method_up(const char *method,const char *sub,const void *params){assert(strcmp(method,"pomodoro")==0 && strcmp(sub,"stop")==0);cloud_stops++;return 0;}
+int death_sound_start(void){deaths++;return 0;}
+""" + handler + exhaustion + r"""
 int main(void){
  mc_study study={0};qm_pomodoro_status_t status={0};
  for(int event=QM_POMODORO_EVENT_STATE_CHANGED;event<=QM_POMODORO_EVENT_FINISHED;event++){
   for(int phase=QM_POMODORO_STATE_IDLE;phase<=QM_POMODORO_STATE_FINISHED;phase++){
    for(int skipped=0;skipped<=1;skipped++){
     qm_pomodoro_event_data_t e={0};e.event=event;e.previous_state=phase;e.phase_skipped=skipped;
+    s_end_reminder_sent=false;
     int before=reminders;handle_pomodoro(&study,&status,&e);
     assert(reminders-before==(phase==QM_POMODORO_STATE_FOCUS && ((event==QM_POMODORO_EVENT_PHASE_DONE && !skipped) || event==QM_POMODORO_EVENT_STOPPED)));
    }
   }
  }
- study.exhausted=true;
+ study.exhausted=true;s_end_reminder_sent=false;
  qm_pomodoro_event_data_t e={0};e.event=QM_POMODORO_EVENT_STOPPED;e.previous_state=QM_POMODORO_STATE_FOCUS;
- int before=reminders;handle_pomodoro(&study,&status,&e);assert(reminders==before);
- puts("PASS: 70 event combinations plus exhausted-stop exclusion");
+ int before=reminders;handle_pomodoro(&study,&status,&e);assert(reminders==before+1);
+ handle_pomodoro(&study,&status,&e);assert(reminders==before+1); /* duplicate stop */
+ s_end_reminder_sent=false;e.event=QM_POMODORO_EVENT_PHASE_DONE;
+ before=reminders;handle_pomodoro(&study,&status,&e);assert(reminders==before+1);
+ e.event=QM_POMODORO_EVENT_FINISHED;handle_pomodoro(&study,&status,&e);assert(reminders==before+1);
+ e.event=QM_POMODORO_EVENT_STOPPED;handle_pomodoro(&study,&status,&e);assert(reminders==before+1);
+ e.event=QM_POMODORO_EVENT_STATE_CHANGED;e.previous_state=QM_POMODORO_STATE_IDLE;e.status.state=QM_POMODORO_STATE_FOCUS;
+ handle_pomodoro(&study,&status,&e);assert(!s_end_reminder_sent);
+ e.event=QM_POMODORO_EVENT_STOPPED;e.previous_state=QM_POMODORO_STATE_FOCUS;
+ handle_pomodoro(&study,&status,&e);assert(reminders==before+2); /* next focus may remind */
+ stop_result=0;finish_exhausted_round();assert(forwards==1 && cloud_stops==1 && deaths==1);
+ stop_result=-5;finish_exhausted_round();assert(forwards==1 && cloud_stops==1 && deaths==2);
+ puts("PASS: 70 event combinations, zero-HP stop, duplicate suppression, next-focus reset, exhaustion stop forwarding");
 }
 """, encoding='utf-8')
         exe = p / 'event.exe'

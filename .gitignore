@@ -32,3 +32,6 @@ __pycache__/
 tools/camera/*.jpg
 tools/camera/*.jpeg
 tools/camera/*.png
+
+# Per-pair ESP-NOW encryption keys
+board_bridge_local.h

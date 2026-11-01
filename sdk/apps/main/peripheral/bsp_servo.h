@@ -8,7 +8,7 @@ extern "C" {
 #include "qm.h"
 
 /*
- * Nominal mapping only. No shaft-position feedback. Bench range 75..105deg.
+ * Nominal mapping only. No shaft-position feedback. Command range 60..120deg; reminder +/-30deg around 90.
  * 信号 P6 / GPIO6，电源 4.8V，地共地。P4 留给摄像头 VSYNC/CS。
  */
 #define BSP_SERVO_PWM_PIN           6
@@ -24,6 +24,10 @@ extern "C" {
 /* First-command center; no automatic movement at boot. */
 #define BSP_SERVO_ZERO_PULSE_US     1500
 
+#define BSP_SERVO_SAFE_ANGLE_MIN        60
+#define BSP_SERVO_SAFE_ANGLE_MAX        120
+/* 60deg cross-sweep needs 13 PWM steps; leave settling time as well. */
+#define BSP_SERVO_REMINDER_TARGET_TICKS 18
 #define BSP_SERVO_MOVE_STEP_DEG         5
 #define BSP_SERVO_MOVE_STEP_MS          40
 
