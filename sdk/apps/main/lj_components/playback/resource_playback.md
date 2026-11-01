@@ -66,4 +66,4 @@ int playback_deinit(void);
 
 当前 `CONFIG_LJYD_PLAYBACK_SUPPORT=1`，`CONFIG_QM_RES_MGR_SUPPORT=1`，元数据选择 MQTT；实际宏以 `main/qm_config/qm_config.h` 为准。不要用文档手动切回旧的初始化接口。
 
-需要验收云控路由、guide words 结束边界、PCM 输出、停止/唤醒抢占、错误恢复、资源元数据超时以及语音恢复。历史记录不证明当前版本全部通过，项目状态见[交接](../../../../../docs/CURRENT_HANDOFF.md)。
+需在实机验收云控路由、guide words 结束边界、PCM 输出、停止/唤醒抢占、错误恢复、资源元数据超时及语音恢复。

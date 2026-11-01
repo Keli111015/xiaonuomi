@@ -307,10 +307,6 @@ if(VOICE_BACKEND_AGORA)
     list(APPEND COMPONENT_REQUIRES pthread 78__esp-opus)
 endif()
 
-if(QM_POSE_SUPPORT)
-    set(COMPONENT_EMBED_FILES "pose/bus.jpg")
-endif()
-
 register_component()
 
 # 开机音效 PCM（16k/单声道/16bit）嵌进固件，生成 _binary_boot_sound_pcm_start/_end
