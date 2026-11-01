@@ -15,4 +15,4 @@ $idfScript = Join-Path $env:IDF_PATH 'tools\idf.py'
 $appRoot = Join-Path $sdkRoot 'apps'
 if ($ConfigureOnly) { & python $idfScript -C $appRoot reconfigure }
 else { & python $idfScript -C $appRoot build }
-if ($LASTEXITCODE -ne 0) { throw "SDK构建失败，退出码 $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "build failed $LASTEXITCODE" }

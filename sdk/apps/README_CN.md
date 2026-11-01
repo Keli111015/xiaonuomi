@@ -1,6 +1,6 @@
 # 应用架构与开发入口
 
-2026-10-31 按 `main/main.c`、配置及业务源码静态整理；未编译或实机验证。当前问题见[交接](../../docs/CURRENT_HANDOFF.md)，完整文档见[导航](../../docs/README.md)。
+应用入口为 `main/main.c`，完整文档见[导航](../../docs/README.md)。
 
 ## 目录
 
