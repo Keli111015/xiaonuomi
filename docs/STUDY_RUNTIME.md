@@ -65,7 +65,9 @@ Agent 下行播放准入与 Pomodoro 静音是独立状态。音频 operation �
 
 ## 专注结束
 
-学习任务只在 FOCUS 阶段自然 PHASE_DONE 且非主动跳过时请求舵机提醒。暂停、停止、休息结束和 FINISHED 不额外触发摆头。动作细节见[专注结束摆头提醒](FOCUS_SERVO_REMINDER.md)。
+当前源码将以下专注结束路径汇入同一提醒入口：自然 PHASE_DONE 且非主动跳过；前一状态为 FOCUS 的 STOPPED（包括暂停中的专注被停止）；聊天、姿态或暂停流血导致 HP 耗尽后主动 stop。旧语音板本地耗尽成功停止后，还会转发 stop 给动作板。
+
+同一专注阶段成功提交提醒后去重，下一次进入新 FOCUS 时复位。FINISHED 不重复提醒；空闲 stop、休息结束、暂停/恢复及 skip 不触发结束提醒。舵机忙或初始化失败时记录拒绝，当前没有动作排队保证。动作细节见[专注结束摆头提醒](FOCUS_SERVO_REMINDER.md)。
 
 ## 边界
 

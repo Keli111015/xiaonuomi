@@ -7,6 +7,7 @@
 | 文档 | 职责 |
 | --- | --- |
 | [项目首页](../README.md) | 项目用途、核心能力、工程入口 |
+| [项目实践复盘](PROJECT_CASE_STUDY.md) | 产品场景、技术取舍、验证记录与团队项目经历 |
 | [完整工程使用说明](FULL_REPOSITORY.md) | 环境、产品配置、开发入口、构建与恢复说明 |
 | [应用架构](../sdk/apps/README_CN.md) | 启动顺序、模块边界、云端调用链 |
 | [学习规则与事件流](STUDY_RUNTIME.md) | 番茄钟、HP、聊天、坐姿与提醒的源码规则 |
@@ -29,3 +30,7 @@
 
 - [SDK 来源元数据](SDK_PROVENANCE.json)、[第三方说明](../THIRD_PARTY_NOTICES.md)：保留上游基线、来源和许可。
 - [SDK 导航](../sdk/README.md)：工程目录和依赖说明。
+
+## 展示素材
+
+- [小诺米概念海报](assets/lil-noemie-poster.png)：README 项目封面，原图由项目维护者提供。
