@@ -24,6 +24,9 @@ qm_err_t hurt_sound_start(void);
  */
 qm_err_t hurt_sound_start_variant(uint8_t variant);
 
+/* 播放一次姿态异常提醒音效；异步提交到本地音效任务。 */
+qm_err_t posture_sound_start(void);
+
 /*
  * 播放一次死亡音效（血量归零时播放）。异步：由本地音效任务编码+播放，调用完立即返回。
  */

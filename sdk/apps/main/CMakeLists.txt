@@ -320,6 +320,8 @@ target_add_binary_data(${COMPONENT_LIB} "voice/hurt_sound_0.pcm" BINARY RENAME_T
 target_add_binary_data(${COMPONENT_LIB} "voice/hurt_sound_1.pcm" BINARY RENAME_TO hurt_sound_1_pcm)
 target_add_binary_data(${COMPONENT_LIB} "voice/hurt_sound_2.pcm" BINARY RENAME_TO hurt_sound_2_pcm)
 target_add_binary_data(${COMPONENT_LIB} "voice/hurt_sound_3.pcm" BINARY RENAME_TO hurt_sound_3_pcm)
+# 姿态提醒音效 PCM（16k/单声道/16bit）
+target_add_binary_data(${COMPONENT_LIB} "voice/posture_sound.pcm" BINARY RENAME_TO posture_sound_pcm)
 # 死亡音效 PCM（16k/单声道/16bit）嵌进固件，生成 _binary_death_sound_pcm_start/_end
 target_add_binary_data(${COMPONENT_LIB} "voice/death_sound.pcm" BINARY RENAME_TO death_sound_pcm)
 # 番茄钟启动音效 PCM（16k/单声道/16bit）嵌进固件，生成 _binary_start_sound_pcm_start/_end

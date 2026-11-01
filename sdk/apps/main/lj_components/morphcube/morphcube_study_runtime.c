@@ -224,7 +224,7 @@ static void morphcube_study_task(void *arg)
                     QM_LOGI(LOG_TAG, "hp exhausted by posture: end round and play death sound");
                     finish_exhausted_round();
                 } else {
-                    (void)hurt_sound_start();
+                    (void)posture_sound_start();
                 }
             }
         }

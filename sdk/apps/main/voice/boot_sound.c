@@ -50,6 +50,8 @@ extern const uint8_t hurt_sound_2_pcm_start[] asm("_binary_hurt_sound_2_pcm_star
 extern const uint8_t hurt_sound_2_pcm_end[] asm("_binary_hurt_sound_2_pcm_end");
 extern const uint8_t hurt_sound_3_pcm_start[] asm("_binary_hurt_sound_3_pcm_start");
 extern const uint8_t hurt_sound_3_pcm_end[] asm("_binary_hurt_sound_3_pcm_end");
+extern const uint8_t posture_sound_pcm_start[] asm("_binary_posture_sound_pcm_start");
+extern const uint8_t posture_sound_pcm_end[] asm("_binary_posture_sound_pcm_end");
 extern const uint8_t death_sound_pcm_start[] asm("_binary_death_sound_pcm_start");
 extern const uint8_t death_sound_pcm_end[] asm("_binary_death_sound_pcm_end");
 extern const uint8_t start_sound_pcm_start[] asm("_binary_start_sound_pcm_start");
@@ -61,8 +63,9 @@ typedef enum {
     LOCAL_SOUND_HURT_1 = 2,
     LOCAL_SOUND_HURT_2 = 3,
     LOCAL_SOUND_HURT_3 = 4,
-    LOCAL_SOUND_DEATH = 5,
-    LOCAL_SOUND_START = 6,
+    LOCAL_SOUND_POSTURE = 5,
+    LOCAL_SOUND_DEATH = 6,
+    LOCAL_SOUND_START = 7,
     LOCAL_SOUND_COUNT
 } local_sound_id_t;
 
@@ -102,6 +105,11 @@ static local_sound_cache_t s_sounds[LOCAL_SOUND_COUNT] = {
         .name = "hurt_3",
         .pcm_start = hurt_sound_3_pcm_start,
         .pcm_end = hurt_sound_3_pcm_end,
+    },
+    [LOCAL_SOUND_POSTURE] = {
+        .name = "posture",
+        .pcm_start = posture_sound_pcm_start,
+        .pcm_end = posture_sound_pcm_end,
     },
     [LOCAL_SOUND_DEATH] = {
         .name = "death",
@@ -434,6 +442,11 @@ qm_err_t hurt_sound_start_variant(uint8_t variant)
     }
     QM_LOGI(LOG_TAG, "hurt sound direct variant=%u", (unsigned)variant);
     return local_sound_request((local_sound_id_t)(LOCAL_SOUND_HURT_0 + variant));
+}
+
+qm_err_t posture_sound_start(void)
+{
+    return local_sound_request(LOCAL_SOUND_POSTURE);
 }
 
 qm_err_t death_sound_start(void)
